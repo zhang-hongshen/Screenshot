@@ -1,32 +1,57 @@
-//
-//  ScreenshotApp.swift
-//  Screenshot
-//
-//  Created by 张鸿燊 on 18/6/26.
-//
-
+import AppKit
+import KeyboardShortcuts
 import SwiftUI
-import SwiftData
 
 @main
 struct ScreenshotApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    @Environment(\.openSettings) private var openSettings
 
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+    init() {
+        NSApplication.shared.setActivationPolicy(.accessory)
+
+        KeyboardShortcuts.onKeyUp(for: .capture) {
+            CaptureManager.shared.start()
         }
-    }()
+        KeyboardShortcuts.onKeyUp(for: .scrollingCapture) {
+            ScrollCaptureManager.shared.start()
+        }
+    }
 
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra {
+            Button("Capture") {
+                CaptureManager.shared.start()
+            }
+            .keyboardShortcut("1", modifiers: .command)
+
+            Button("Scrolling Capture") {
+                ScrollCaptureManager.shared.start()
+            }
+            .keyboardShortcut("2", modifiers: .command)
+
+            Button("Open Lastest Capture") {
+                CaptureManager.shared.reopenLastCapture()
+            }
+
+            Divider()
+
+            Button("Settings") {
+                openSettings()
+            }
+            .keyboardShortcut(",", modifiers: .command)
+
+            Divider()
+
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q", modifiers: .command)
+        } label: {
+            Image(systemName: "macwindow")
         }
-        .modelContainer(sharedModelContainer)
+
+        Settings {
+            SettingsView()
+        }
     }
 }
