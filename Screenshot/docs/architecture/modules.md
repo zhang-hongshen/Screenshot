@@ -210,7 +210,7 @@ Editing operations include add, multi-select by intersection, delete, move, resi
 
 `CaptureOverlayView` implements the in-place editor over the live desktop selection. `AnnotationEditorView` implements editing of the last completed image in a normal resizable window.
 
-They intentionally share the annotation model, document, toolbar, and rendering primitives. Gesture handling and transient state are duplicated, so changes to editing behavior must currently be applied to both views.
+They intentionally share the annotation model, `AnnotationEditingSession`, toolbar, and rendering primitives. Gesture handling remains presentation-specific because overlay coordinates are live screen points while standalone editor coordinates map through fitted and zoomed image geometry.
 
 Dependency direction inside `Annotation/` is:
 

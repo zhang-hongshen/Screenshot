@@ -8,6 +8,7 @@ Capture failure activation and modal alert presentation now live in the focused 
 
 - Add `Annotation/BasicAnnotation` as the owner of general undo/redo, zoom, Copy, and Finish controls while keeping concrete annotation features, shared infrastructure, and editor presentation as sibling folders.
 - Organize annotation source by concrete feature so Shape, Text, and Blur/Redaction each own their model, UI, and operations, with shared core/UI and standalone editor boundaries.
+- Share tool/style, document/draft, text-entry, annotation-selection state, and common editing actions between both editor presentations through `AnnotationEditingSession`.
 - Make Select the default annotation tool in both the capture overlay and standalone editor.
 - Support marquee selection of one, multiple, or all annotations.
 - Select all annotations with Command+A while Select is active.

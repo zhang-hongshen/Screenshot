@@ -84,7 +84,7 @@ Source is organized by annotation feature and editing responsibility. Each concr
 - `Shared/UI/` contains controls and transient selection UI shared by all annotation types.
 - `Editor/` contains the standalone editor window/view and the export-time `AnnotationCanvas` composition.
 
-The standalone editor and overlay editor share annotation models, basic controls, and rendering views, but each currently implements its own gesture and transient editing state.
+The standalone editor and overlay editor share annotation models, basic controls, rendering views, and a view-owned `AnnotationEditingSession` for tool/style, document/draft, text-entry, and selection state. Each presentation retains its distinct gesture mapping and presentation-specific transient state.
 
 ### `Preview/`
 

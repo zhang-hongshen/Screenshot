@@ -164,7 +164,7 @@ There are no settings for output location, preview behavior, cursor capture, ima
 - Window detection is polling-based and refreshes shareable window metadata roughly every 600 ms; fast window changes can briefly leave stale highlighting.
 - There is no explicit Screen Recording permission onboarding, status check, or recovery workflow.
 - Save and Share are implemented below the view layer but are unreachable from current toolbars.
-- Annotation gesture/state logic is duplicated between `CaptureOverlayView` and `AnnotationEditorView`, increasing the chance of behavioral drift.
+- Annotation gesture mapping remains duplicated between `CaptureOverlayView` and `AnnotationEditorView`, increasing the chance of behavioral drift even though shared editing state and common actions now live in `AnnotationEditingSession`.
 - Annotation selection bounds for text are estimated from character count rather than measured layout.
 - Standalone-editor resize supports four corner handles but not edge-only handles, rotation, or aspect-ratio locking.
 - Existing text annotations can be moved, resized, and restyled, but their text content cannot be edited after creation.

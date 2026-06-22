@@ -62,6 +62,15 @@ General editing operations that are not specific to Shape, Text, or Blur/Redacti
 Reason:
 Keep basic editing actions cohesive without placing the entire annotation domain inside a generic container or assigning general actions to a concrete annotation type.
 
+### Shared Annotation Editing Session
+
+Both editor presentations own an `AnnotationEditingSession` as SwiftUI `@State`. The observable session contains tool and style choices, the annotation document and draft, text-entry state, selected IDs and marquee state, plus common add-text, delete, select-all, undo/redo, and style-update actions.
+
+Gesture mapping remains in each presentation because the capture overlay operates in live screen coordinates while the standalone editor maps through fitted and zoomed image coordinates.
+
+Reason:
+Remove duplicated editing state and common operations without forcing unlike coordinate systems into one gesture controller or changing interaction behavior.
+
 ### Manual Scrolling Capture
 
 Scrolling capture accepts a selected window, records the first frame through ScreenCaptureKit, then observes vertical wheel, trackpad, and navigation-key input. After input pauses, it captures pairs of frames until the target is visually stable. Adjacent stable frames are aligned by visual overlap and only new content is appended.
