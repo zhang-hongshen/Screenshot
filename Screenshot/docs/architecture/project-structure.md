@@ -80,7 +80,7 @@ Source is organized by annotation feature and editing responsibility. Each concr
 - `ShapeAnnotation/` owns `ShapeAnnotation`, `ShapeType`, shape rendering, geometry transforms, scaling, and shape style mutations.
 - `TextAnnotation/` owns `TextAnnotation`, text rendering/input, geometry transforms, scaling, and font/color mutations.
 - `BlurAnnotation/` owns the pixelated-redaction value, rendering, geometry transforms, and scaling.
-- `Shared/Core/` contains the unifying `Annotation` enum, `AnnotationDocument`, common geometry transform primitives, and tool definitions. The enum dispatches to type-specific operations rather than implementing them itself.
+- `Shared/Core/` contains the unifying `Annotation` enum, `AnnotationDocument`, shared `AnnotationEditingSession`, common geometry transform primitives, and tool definitions. The enum dispatches to type-specific operations rather than implementing them itself.
 - `Shared/UI/` contains controls and transient selection UI shared by all annotation types.
 - `Editor/` contains the standalone editor window/view and the export-time `AnnotationCanvas` composition.
 

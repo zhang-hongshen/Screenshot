@@ -118,8 +118,7 @@ Responsibilities:
 
 State ownership:
 
-- durable annotations are held by a local `AnnotationDocument`;
-- draft annotation, selected IDs, marquee, current tool, and style values are SwiftUI `@State`;
+- durable annotations, draft annotation, selected IDs, marquee, current tool, and style values are held by a view-owned `@State` `AnnotationEditingSession`;
 - capture geometry is shared across display overlays through `RegionSelection`;
 - edit readiness and captured assets come from the retained window's `CaptureOverlayState`.
 
@@ -186,6 +185,7 @@ Concrete behavior belongs to these type folders. The shared `Annotation` enum pr
 
 - `Annotation` provides the heterogeneous collection boundary and common-operation dispatch;
 - `AnnotationDocument` owns annotation storage and snapshot-based history;
+- `AnnotationEditingSession` owns shared tool/style, document/draft, text-entry, and annotation-selection state plus common editing actions;
 - `AnnotationGeometryTransform` supplies common point and rectangle mapping used by concrete type operations; and
 - `AnnotationTool` defines the tools exposed by both editing presentations.
 

@@ -10,23 +10,11 @@ struct CaptureOverlayView: View {
     let isScrollingCapture: Bool
 
     @State private var windowMask: CGImage?
-    @State private var selectedTool: AnnotationTool = .select
-    @State private var selectedShape: ShapeType = .rectangle
-    @State private var document = AnnotationDocument()
-    @State private var draft: Annotation?
-    @State private var color: Color = .red
-    @State private var lineWidth: CGFloat = 4
-    @State private var fontFamily = "Helvetica"
-    @State private var fontSize: CGFloat = 24
-    @State private var fontWeight: Font.Weight = .regular
-    @State private var textDraft = ""
-    @State private var textPosition: CGPoint?
-    @State private var selectedAnnotationIDs: Set<UUID> = []
-    @State private var annotationSelectionRect: CGRect?
+    @State private var editing = AnnotationEditingSession()
 
     var body: some View {
         captureContent
-            .onDeleteCommand { _ = deleteSelection() }
+            .onDeleteCommand { _ = editing.deleteSelection() }
             .onAppear(perform: installKeyboardHandlers)
             .onDisappear {
                 state.deleteSelection = nil
@@ -48,10 +36,6 @@ struct CaptureOverlayView: View {
         }
         .ignoresSafeArea()
         .coordinateSpace(name: "captureOverlay")
-    }
-
-    private var allAnnotations: [Annotation] {
-        document.annotations + (draft.map { [$0] } ?? [])
     }
 
     private var editingContent: some View {
@@ -80,13 +64,15 @@ struct CaptureOverlayView: View {
     }
 
     private func annotationCanvas(capturedFrame: CGRect) -> some View {
-        GeometryReader { _ in
+        @Bindable var editing = editing
+
+        return GeometryReader { _ in
             let canvasFrame = overlayRect(from: capturedFrame)
             LiveAnnotationCanvas(
                 pixelatedImage: state.pixelatedImage,
-                annotations: allAnnotations,
-                selectedAnnotationIDs: selectedAnnotationIDs,
-                selectionRect: annotationSelectionRect
+                annotations: editing.allAnnotations,
+                selectedAnnotationIDs: editing.selectedAnnotationIDs,
+                selectionRect: editing.selectionRect
             )
             .frame(width: canvasFrame.width, height: canvasFrame.height)
             .mask {
@@ -99,16 +85,16 @@ struct CaptureOverlayView: View {
             .contentShape(Rectangle())
             .gesture(annotationGesture(canvasSize: canvasFrame.size))
             .overlay(alignment: .topLeading) {
-                if let textPosition {
+                if let textPosition = editing.textPosition {
                     TextAnnotationInputView(
-                        text: $textDraft,
+                        text: $editing.textDraft,
                         position: textPosition,
-                        fontSize: fontSize,
-                        fontFamily: fontFamily,
-                        fontWeight: fontWeight,
-                        color: color,
-                        commit: addText,
-                        cancel: cancelText
+                        fontSize: editing.fontSize,
+                        fontFamily: editing.fontFamily,
+                        fontWeight: editing.fontWeight,
+                        color: editing.color,
+                        commit: editing.addText,
+                        cancel: editing.cancelText
                     )
                 }
             }
@@ -117,26 +103,28 @@ struct CaptureOverlayView: View {
     }
 
     private func annotationToolbar(capturedFrame: CGRect) -> some View {
-        GeometryReader { proxy in
+        @Bindable var editing = editing
+
+        return GeometryReader { proxy in
             let canvasFrame = overlayRect(from: capturedFrame)
             AnnotationToolbar(
-                selectedTool: $selectedTool,
-                selectedShape: $selectedShape,
-                color: $color,
-                lineWidth: $lineWidth,
-                fontFamily: $fontFamily,
-                fontSize: $fontSize,
-                fontWeight: $fontWeight,
-                canUndo: document.canUndo,
-                canRedo: document.canRedo,
-                undo: document.undo,
-                redo: document.redo,
+                selectedTool: $editing.selectedTool,
+                selectedShape: $editing.selectedShape,
+                color: $editing.color,
+                lineWidth: $editing.lineWidth,
+                fontFamily: $editing.fontFamily,
+                fontSize: $editing.fontSize,
+                fontWeight: $editing.fontWeight,
+                canUndo: editing.document.canUndo,
+                canRedo: editing.document.canRedo,
+                undo: editing.document.undo,
+                redo: editing.document.redo,
                 zoomControls: nil,
                 copy: {
                     guard let rect = selection.captureRect else { return }
                     CaptureManager.shared.copyCapture(
                         rect: rect,
-                        annotations: document.annotations,
+                        annotations: editing.document.annotations,
                         windowMask: state.windowMask
                     )
                 },
@@ -144,7 +132,7 @@ struct CaptureOverlayView: View {
                     guard let rect = selection.captureRect else { return }
                     CaptureManager.shared.finishEditing(
                         rect: rect,
-                        annotations: document.annotations,
+                        annotations: editing.document.annotations,
                         windowMask: state.windowMask
                     )
                 }
@@ -218,20 +206,20 @@ struct CaptureOverlayView: View {
                     width: abs(current.x - start.x),
                     height: abs(current.y - start.y)
                 )
-                switch selectedTool {
+                switch editing.selectedTool {
                 case .select:
-                    annotationSelectionRect = rect
+                    editing.selectionRect = rect
                 case .shape:
-                    draft = .shape(ShapeAnnotation(
-                        type: selectedShape,
+                    editing.draft = .shape(ShapeAnnotation(
+                        type: editing.selectedShape,
                         rect: rect,
                         startPoint: start,
                         endPoint: current,
-                        lineWidth: lineWidth,
-                        color: color
+                        lineWidth: editing.lineWidth,
+                        color: editing.color
                     ))
                 case .blur:
-                    draft = .blur(BlurAnnotation(rect: rect))
+                    editing.draft = .blur(BlurAnnotation(rect: rect))
                 case .text:
                     break
                 }
@@ -239,24 +227,24 @@ struct CaptureOverlayView: View {
             .onEnded { value in
                 let end = annotationPoint(value.location, canvasSize: canvasSize)
                 let dragDistance = hypot(value.translation.width, value.translation.height)
-                if selectedTool == .select {
-                    if let annotationSelectionRect, dragDistance >= 3 {
-                        selectedAnnotationIDs = Set(document.annotations.compactMap {
-                            $0.selectionBounds.intersects(annotationSelectionRect)
+                if editing.selectedTool == .select {
+                    if let selectionRect = editing.selectionRect, dragDistance >= 3 {
+                        editing.selectedAnnotationIDs = Set(editing.document.annotations.compactMap {
+                            $0.selectionBounds.intersects(selectionRect)
                                 ? $0.id
                                 : nil
                         })
                     } else {
-                        selectedAnnotationIDs.removeAll()
+                        editing.selectedAnnotationIDs.removeAll()
                     }
-                    annotationSelectionRect = nil
-                } else if selectedTool == .text, dragDistance < 8 {
-                    textPosition = end
-                    textDraft = ""
-                } else if let draft, dragDistance >= 3 {
-                    document.add(draft)
+                    editing.selectionRect = nil
+                } else if editing.selectedTool == .text, dragDistance < 8 {
+                    editing.textPosition = end
+                    editing.textDraft = ""
+                } else if let draft = editing.draft, dragDistance >= 3 {
+                    editing.document.add(draft)
                 }
-                draft = nil
+                editing.draft = nil
             }
     }
 
@@ -278,57 +266,9 @@ struct CaptureOverlayView: View {
             .onEnded { _ in selection.end() }
     }
 
-    private func addText() {
-        let text = textDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let position = textPosition, !text.isEmpty else {
-            textPosition = nil
-            return
-        }
-        document.add(.text(TextAnnotation(
-            text: text,
-            position: position,
-            fontSize: fontSize,
-            fontFamily: fontFamily,
-            fontWeight: fontWeight,
-            color: color
-        )))
-        textPosition = nil
-    }
-
-    private func cancelText() {
-        textDraft = ""
-        textPosition = nil
-    }
-
-    @discardableResult
-    private func deleteSelection() -> Bool {
-        guard textPosition == nil, !selectedAnnotationIDs.isEmpty else { return false }
-        document.remove(ids: selectedAnnotationIDs)
-        selectedAnnotationIDs.removeAll()
-        return true
-    }
-
     private func installKeyboardHandlers() {
-        let selectedIDs = $selectedAnnotationIDs
-        let activeTool = $selectedTool
-        let activeTextPosition = $textPosition
-        let document = document
-
-        state.deleteSelection = {
-            let ids = selectedIDs.wrappedValue
-            guard activeTextPosition.wrappedValue == nil, !ids.isEmpty else { return false }
-            document.remove(ids: ids)
-            selectedIDs.wrappedValue.removeAll()
-            return true
-        }
-
-        state.selectAllAnnotations = {
-            guard activeTool.wrappedValue == .select,
-                  activeTextPosition.wrappedValue == nil,
-                  !document.annotations.isEmpty else { return false }
-            selectedIDs.wrappedValue = Set(document.annotations.map(\.id))
-            return true
-        }
+        state.deleteSelection = editing.deleteSelection
+        state.selectAllAnnotations = editing.selectAllAnnotations
     }
 
     private var captureInteractionContent: some View {

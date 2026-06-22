@@ -4,7 +4,7 @@ Status date: 2026-06-22
 
 Screenshot is a functioning native macOS menu bar application with window capture, region capture, scrolling capture, in-place annotation, clipboard output, post-capture preview, and an in-memory reopen editor. The implementation is compact and SwiftUI-first, with AppKit used for overlay/panel windows and system integrations.
 
-Annotation source is organized by responsibility. `BasicAnnotation` owns general editing operations such as undo/redo, zoom, Copy, and Finish. Shape, Text, and Blur/Redaction folders each contain their model, specialized UI, and type-specific geometry, scaling, and style operations. Cross-type document/history, tool, and shared selection UI lives under `Shared`, while the standalone presentation lives under `Editor`.
+Annotation source is organized by responsibility. `BasicAnnotation` owns general editing operations such as undo/redo, zoom, Copy, and Finish. Shape, Text, and Blur/Redaction folders each contain their model, specialized UI, and type-specific geometry, scaling, and style operations. Cross-type document/history, editing-session state, tool, and shared selection UI lives under `Shared`, while the standalone presentation lives under `Editor`.
 
 ## Platform and Build
 
@@ -149,7 +149,7 @@ There are no settings for output location, preview behavior, cursor capture, ima
 
 ## State and Concurrency
 
-- `CaptureManager`, `ScrollCaptureManager`, `CaptureResultManager`, `ScreenCaptureService`, `WindowDetector`, `RegionSelection`, `AnnotationDocument`, and `AnnotationEditorService` are main-actor isolated, directly or through project-wide default isolation.
+- `CaptureManager`, `ScrollCaptureManager`, `CaptureResultManager`, `ScreenCaptureService`, `WindowDetector`, `RegionSelection`, `AnnotationEditingSession`, `AnnotationDocument`, and `AnnotationEditorService` are main-actor isolated, directly or through project-wide default isolation.
 - `CaptureResultManager` owns the latest completed image and frame, preview/editor presentation, reopen state, annotation rendering, and output integrations shared by standard and scrolling capture.
 - Observation uses `@Observable` for shared mutable models and SwiftUI `@State` for view-local editor state.
 - Window detection and capture use retained cancellable tasks.
