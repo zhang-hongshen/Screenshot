@@ -53,6 +53,7 @@ System-facing and workflow coordination code lives here.
 - `CaptureManager.swift` is the main-actor singleton for standard window/region selection, capture tasks, in-place editing, and live-overlay export coordination.
 - `ScrollCaptureManager.swift` is the main-actor singleton for scrolling-window selection, scrolling UI windows, input monitoring, stable-frame capture, stitching, masking, and scrolling-session teardown.
 - `CaptureResultManager.swift` owns the latest completed image, preview and standalone editor windows, reopen lifecycle, annotation rendering, and copy/save/share integrations shared by both capture workflows.
+- `CaptureErrorPresenter.swift` is the focused AppKit boundary for activating the application and presenting capture failures.
 - `ScreenCaptureService.swift` owns stateless ScreenCaptureKit window acquisition and multi-display region compositing shared by the workflow managers.
 - `WindowDetector.swift` polls ScreenCaptureKit shareable content and Core Graphics window ordering to identify the frontmost eligible window under the pointer.
 - `ScreenCoordinates.swift` centralizes conversions among AppKit's bottom-left global coordinates, ScreenCaptureKit's top-left coordinates, per-screen source rectangles, and SwiftUI overlay coordinates.
@@ -120,7 +121,7 @@ The intended dependency flow is:
 ScreenshotApp
     → CaptureManager / ScrollCaptureManager
         → Overlay / Preview / Annotation windows and views
-        → CaptureResultManager / WindowDetector / ScreenCaptureService / ScreenCoordinates
+        → CaptureResultManager / CaptureErrorPresenter / WindowDetector / ScreenCaptureService / ScreenCoordinates
             → AnnotationEditorService
         → ScreenCaptureKit and AppKit integrations
 

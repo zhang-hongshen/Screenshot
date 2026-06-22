@@ -2,6 +2,7 @@
 
 `CaptureManager` now owns the standard capture workflow, `ScrollCaptureManager` owns the complete scrolling-capture workflow and state, and `CaptureResultManager` owns completed-output state and presentation shared by both.
 Stateless ScreenCaptureKit image acquisition and multi-display compositing now live in `ScreenCaptureService` rather than workflow managers.
+Capture failure activation and modal alert presentation now live in the focused `CaptureErrorPresenter` AppKit boundary.
 
 ## Completed
 

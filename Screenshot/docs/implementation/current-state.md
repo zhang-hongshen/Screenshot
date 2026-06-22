@@ -85,6 +85,8 @@ Finishing creates one in-memory image at the source capture scale and opens it i
 
 Overlay windows are ordered out and capture waits 100 ms before ScreenCaptureKit runs. Capture failures restore the retained window where possible and present an AppKit error alert.
 
+`CaptureErrorPresenter` centralizes application activation and the modal AppKit error alert used by both capture workflows.
+
 ## In-Place Annotation
 
 Selecting a window or region first triggers a capture used as the redaction source, then returns the retained overlay to editing mode. The selection can still be adjusted; resizing a window-derived selection clears its alpha mask and converts presentation to rectangular region editing.

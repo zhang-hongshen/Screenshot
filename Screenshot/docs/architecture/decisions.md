@@ -31,6 +31,15 @@ The latest completed image and frame, preview panel, standalone editor window, r
 Reason:
 Separate active capture orchestration from completed-output state and keep AppKit result presentation from accumulating in either capture workflow manager.
 
+### Required AppKit Window Boundaries
+
+Capture overlays remain custom `NSWindow` instances because they require one screen-saver-level, stationary, transparent window per display across Spaces. The scrolling toolbar, live thumbnail, and completed preview remain `NSPanel` instances because they require nonactivating, floating, click-through, or full-screen auxiliary behavior. The standalone editor remains an `NSWindow` because it must open on the display containing the capture and retain window-local Command-A routing.
+
+SwiftUI continues to own the content of every window and panel. `CaptureErrorPresenter` owns modal capture-error alerts so AppKit activation and alert construction do not spread through workflow managers.
+
+Reason:
+SwiftUI scenes do not expose all required window levels, nonactivation, per-screen placement, collection behavior, or responder routing while preserving the current UI behavior.
+
 ### Annotation Features Own Their UI and Operations
 
 Shape, Text, and Blur/Redaction are separate feature folders. Each folder owns

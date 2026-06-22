@@ -154,6 +154,10 @@ This stateless utility is the single conversion boundary for the coordinate syst
 
 This stateless service owns ScreenCaptureKit image acquisition. It captures desktop-independent windows without shadows and composites intersecting display pieces for a global region into one sRGB image at the highest participating display scale. Workflow managers remain responsible for session state, window visibility, cancellation, and routing the resulting image.
 
+### `CaptureErrorPresenter`
+
+This focused AppKit boundary activates the accessory application and presents capture errors with the existing modal `NSAlert`. Workflow managers pass errors to it instead of duplicating application activation and alert construction.
+
 ## Annotation Domain and Editing
 
 Annotation-domain Swift source is organized into sibling responsibility folders under `Annotation/`. These folders are source-organization boundaries inside the single application module; they do not create separate Swift modules.

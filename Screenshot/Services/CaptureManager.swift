@@ -159,7 +159,7 @@ final class CaptureManager {
                 return
             } catch {
                 retainedWindow.makeKeyAndOrderFront(nil)
-                presentError(error)
+                CaptureErrorPresenter.present(error)
             }
         }
     }
@@ -225,7 +225,7 @@ final class CaptureManager {
                 return
             } catch {
                 windows.first?.makeKeyAndOrderFront(nil)
-                presentError(error)
+                CaptureErrorPresenter.present(error)
             }
         }
     }
@@ -306,14 +306,6 @@ final class CaptureManager {
         self.escapeMonitor = nil
     }
 
-    private func presentError(_ error: Error) {
-        NSApp.activate()
-        let nsError = error as NSError
-        let alert = NSAlert(error: error)
-        alert.messageText = "Unable to capture the screen"
-        alert.informativeText = "\(error.localizedDescription)\n\(nsError.domain) (\(nsError.code))"
-        alert.runModal()
-    }
 }
 
 private enum ExportAction: Equatable {
