@@ -81,7 +81,7 @@ Finishing creates one in-memory image at the source capture scale and opens it i
 
 ### Screen capture and compositing
 
-The manager intersects the selected global AppKit rectangle with every available `NSScreen`, maps screens to `SCDisplay` values, and captures each display-local source rectangle. Pieces are drawn into an sRGB bitmap at the highest point-to-pixel scale among intersected displays. The cursor is excluded.
+`ScreenCaptureService` intersects the selected global AppKit rectangle with every available `NSScreen`, maps screens to `SCDisplay` values, and captures each display-local source rectangle. Pieces are drawn into an sRGB bitmap at the highest point-to-pixel scale among intersected displays. The cursor is excluded.
 
 Overlay windows are ordered out and capture waits 100 ms before ScreenCaptureKit runs. Capture failures restore the retained window where possible and present an AppKit error alert.
 
@@ -147,7 +147,7 @@ There are no settings for output location, preview behavior, cursor capture, ima
 
 ## State and Concurrency
 
-- `CaptureManager`, `ScrollCaptureManager`, `WindowDetector`, `RegionSelection`, `AnnotationDocument`, and `AnnotationEditorService` are main-actor isolated, directly or through project-wide default isolation.
+- `CaptureManager`, `ScrollCaptureManager`, `ScreenCaptureService`, `WindowDetector`, `RegionSelection`, `AnnotationDocument`, and `AnnotationEditorService` are main-actor isolated, directly or through project-wide default isolation.
 - Observation uses `@Observable` for shared mutable models and SwiftUI `@State` for view-local editor state.
 - Window detection and capture use retained cancellable tasks.
 - `ScrollCaptureManager` owns scrolling selection, backdrop/control/thumbnail windows, ScreenCaptureKit frame capture, stitching, masking, and a cancellable debounce task plus global scroll and key monitors that are removed when the session finishes or is cancelled.

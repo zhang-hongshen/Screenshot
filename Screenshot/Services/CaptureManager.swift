@@ -130,24 +130,7 @@ final class CaptureManager {
     /// Captures the window without its shadow so the overlay can use the real alpha
     /// channel instead of approximating the window shape with a fixed corner radius.
     func captureHighlightMask(for window: SCWindow) async throws -> CGImage {
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let configuration = SCStreamConfiguration()
-        configuration.backgroundColor = .clear
-        configuration.showsCursor = false
-        configuration.ignoreShadowsSingleWindow = true
-        configuration.ignoreGlobalClipSingleWindow = true
-        configuration.captureResolution = .best
-
-        let scale = max(1, CGFloat(filter.pointPixelScale))
-        configuration.width = max(1, Int((window.frame.width * scale).rounded()))
-        configuration.height = max(1, Int((window.frame.height * scale).rounded()))
-
-        let image = try await SCScreenshotManager.captureImage(
-            contentFilter: filter,
-            configuration: configuration
-        )
-        try Task.checkCancellation()
-        return image
+        try await ScreenCaptureService.captureWindow(window)
     }
 
     private func enterEditing(frame: CGRect, windowMask: CGImage?) {
@@ -179,7 +162,7 @@ final class CaptureManager {
 
             do {
                 try await Task.sleep(for: .milliseconds(100))
-                let cgImage = try await capture(frame)
+                let cgImage = try await ScreenCaptureService.captureRegion(frame)
                 try Task.checkCancellation()
                 let image = NSImage(cgImage: cgImage, size: frame.size)
                 retainedWindow.overlayState.pixelatedImage = annotationService
@@ -220,7 +203,7 @@ final class CaptureManager {
             }
             do {
                 try await Task.sleep(for: .milliseconds(100))
-                let cgImage = try await capture(rect)
+                let cgImage = try await ScreenCaptureService.captureRegion(rect)
                 try Task.checkCancellation()
                 let image = NSImage(cgImage: cgImage, size: rect.size)
                 let pixelatedImage = annotationService.pixelatedImage(for: image)
@@ -468,83 +451,6 @@ final class CaptureManager {
         self.escapeMonitor = nil
     }
 
-    private func capture(_ selection: CGRect) async throws -> CGImage {
-        return try await captureRegionByDisplay(selection)
-    }
-
-    private func captureRegionByDisplay(_ selection: CGRect) async throws -> CGImage {
-        let content = try await SCShareableContent.current
-        let currentProcessID = ProcessInfo.processInfo.processIdentifier
-        let excludedApplications = content.applications.filter {
-            $0.processID == currentProcessID
-        }
-        let displaysByID = Dictionary(uniqueKeysWithValues: content.displays.map { ($0.displayID, $0) })
-        let screenParts = NSScreen.screens.compactMap { screen -> (NSScreen, SCDisplay, CGRect)? in
-            let intersection = selection.intersection(screen.frame)
-            guard !intersection.isNull,
-                  intersection.width > 0,
-                  intersection.height > 0,
-                  let id = ScreenCoordinates.displayID(for: screen),
-                  let display = displaysByID[id] else { return nil }
-            return (screen, display, intersection)
-        }
-        guard !screenParts.isEmpty else { throw CaptureError.noDisplay }
-
-        let outputScale = screenParts.map { part in
-            let filter = SCContentFilter(
-                display: part.1,
-                excludingApplications: excludedApplications,
-                exceptingWindows: []
-            )
-            return max(1, CGFloat(filter.pointPixelScale))
-        }.max() ?? 1
-        var pieces: [(appKitRect: CGRect, image: CGImage)] = []
-
-        for (screen, display, intersection) in screenParts {
-            try Task.checkCancellation()
-            let filter = SCContentFilter(
-                display: display,
-                excludingApplications: excludedApplications,
-                exceptingWindows: []
-            )
-            let scale = max(1, CGFloat(filter.pointPixelScale))
-            let config = SCStreamConfiguration()
-            config.sourceRect = ScreenCoordinates.sourceRect(for: intersection, on: screen)
-            config.width = max(1, Int((intersection.width * scale).rounded()))
-            config.height = max(1, Int((intersection.height * scale).rounded()))
-            config.showsCursor = false
-            config.captureResolution = .best
-            let image = try await SCScreenshotManager.captureImage(
-                contentFilter: filter,
-                configuration: config
-            )
-            pieces.append((intersection, image))
-        }
-
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                data: nil,
-                width: max(1, Int((selection.width * outputScale).rounded())),
-                height: max(1, Int((selection.height * outputScale).rounded())),
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: colorSpace,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              ) else { throw CaptureError.cannotCreateCanvas }
-
-        context.interpolationQuality = .high
-        for piece in pieces {
-            context.draw(piece.image, in: CGRect(
-                x: (piece.appKitRect.minX - selection.minX) * outputScale,
-                y: (piece.appKitRect.minY - selection.minY) * outputScale,
-                width: piece.appKitRect.width * outputScale,
-                height: piece.appKitRect.height * outputScale
-            ))
-        }
-        guard let image = context.makeImage() else { throw CaptureError.noImage }
-        return image
-    }
-
     private func presentError(_ error: Error) {
         NSApp.activate()
         let nsError = error as NSError
@@ -552,20 +458,6 @@ final class CaptureManager {
         alert.messageText = "Unable to capture the screen"
         alert.informativeText = "\(error.localizedDescription)\n\(nsError.domain) (\(nsError.code))"
         alert.runModal()
-    }
-}
-
-private enum CaptureError: LocalizedError {
-    case noDisplay
-    case cannotCreateCanvas
-    case noImage
-
-    var errorDescription: String? {
-        switch self {
-        case .noDisplay: "The selected region does not intersect an available display."
-        case .cannotCreateCanvas: "The combined screenshot canvas could not be created."
-        case .noImage: "ScreenCaptureKit did not return an image."
-        }
     }
 }
 

@@ -147,24 +147,7 @@ final class ScrollCaptureManager {
     }
 
     func captureHighlightMask(for window: SCWindow) async throws -> CGImage {
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let configuration = SCStreamConfiguration()
-        configuration.backgroundColor = .clear
-        configuration.showsCursor = false
-        configuration.ignoreShadowsSingleWindow = true
-        configuration.ignoreGlobalClipSingleWindow = true
-        configuration.captureResolution = .best
-
-        let scale = max(1, CGFloat(filter.pointPixelScale))
-        configuration.width = max(1, Int((window.frame.width * scale).rounded()))
-        configuration.height = max(1, Int((window.frame.height * scale).rounded()))
-
-        let image = try await SCScreenshotManager.captureImage(
-            contentFilter: filter,
-            configuration: configuration
-        )
-        try Task.checkCancellation()
-        return image
+        try await ScreenCaptureService.captureWindow(window)
     }
 
     private func makeControlWindow(for captureFrame: CGRect) -> ScrollCaptureControlWindow {

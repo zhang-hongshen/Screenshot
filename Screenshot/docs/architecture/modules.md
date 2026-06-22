@@ -61,7 +61,7 @@ Responsibilities:
 - create overlays for all current `NSScreen` instances;
 - transition from window/region selection into in-place editing;
 - hide overlays before ScreenCaptureKit takes an image;
-- capture each intersected display and composite pieces into one sRGB image;
+- request window or region images from `ScreenCaptureService`;
 - render and dispatch copy, save, share, and finish actions;
 - show the post-capture preview and standalone editor;
 - retain the last completed image for reopening; and
@@ -148,6 +148,10 @@ This `@MainActor @Observable` service runs a cancellable polling loop:
 ### `ScreenCoordinates`
 
 This stateless utility is the single conversion boundary for the coordinate systems used by AppKit, ScreenCaptureKit, SwiftUI overlays, and per-display capture source rectangles. Capture and overlay code should use these functions instead of duplicating Y-axis inversions or display offsets.
+
+### `ScreenCaptureService`
+
+This stateless service owns ScreenCaptureKit image acquisition. It captures desktop-independent windows without shadows and composites intersecting display pieces for a global region into one sRGB image at the highest participating display scale. Workflow managers remain responsible for session state, window visibility, cancellation, and routing the resulting image.
 
 ## Annotation Domain and Editing
 
@@ -276,7 +280,7 @@ The initial capture taken when editing begins supplies the redaction pixels. The
 
 ## Architectural Constraints
 
-- Keep ScreenCaptureKit calls inside services, primarily `CaptureManager` and `ScrollCaptureManager`.
+- Keep ScreenCaptureKit image acquisition inside `ScreenCaptureService`; managers own capture workflow and `WindowDetector` owns shareable-window discovery.
 - Keep AppKit limited to application/window lifecycle and system integrations.
 - Keep observable mutable UI state main-actor isolated.
 - Preserve in-place editing inside the capture overlay; the standalone editor is only for completed captures.
