@@ -8,11 +8,11 @@ The project is compiled as one application module. The “modules” below are l
 Menu bar / global shortcut
           │
           ▼
-    CaptureManager ────────────────┐
-    │           │                  │
-    ▼           ▼                  ▼
-Capture       Preview       Standalone editor
-overlays       panel
+ CaptureManager ──────── CaptureResultManager
+    │                      │             │
+    ▼                      ▼             ▼
+Capture                 Preview    Standalone editor
+overlays                  panel
     │                              │
     ├── RegionSelection            ├── AnnotationDocument
     ├── WindowDetector             ├── AnnotationToolbar
@@ -44,16 +44,14 @@ It does not own capture state. The process-wide capture managers outlive individ
 
 ### `CaptureManager`
 
-`CaptureManager` is the standard window/region capture and completed-output workflow state machine. It is `@MainActor` because it owns AppKit windows, observable UI state, and task transitions.
+`CaptureManager` is the standard window/region capture and in-place editing workflow state machine. It is `@MainActor` because it owns overlay windows, observable UI state, and task transitions.
 
 Owned state:
 
 - one `CaptureOverlayWindow` per active display, reduced to one retained window during editing;
-- an optional preview panel and standalone editor window;
 - active `WindowDetector` and shared `RegionSelection` instances;
 - window-detection, capture, and keyboard-monitor lifetimes;
-- the most recently completed image and capture frame; and
-- the shared `AnnotationEditorService`.
+- the retained in-place editing overlay.
 
 Responsibilities:
 
@@ -63,18 +61,21 @@ Responsibilities:
 - hide overlays before ScreenCaptureKit takes an image;
 - request window or region images from `ScreenCaptureService`;
 - render and dispatch copy, save, share, and finish actions;
-- show the post-capture preview and standalone editor;
-- retain the last completed image for reopening; and
+- hand completed images to `CaptureResultManager`; and
 - present capture errors.
+
+### `CaptureResultManager`
+
+`CaptureResultManager` owns completed-output state and presentation shared by standard and scrolling capture. It retains the latest image and frame, creates and dismisses the preview and standalone editor windows, handles reopen, and delegates rendering plus copy/save/share system integration to `AnnotationEditorService`.
 
 ### `ScrollCaptureManager`
 
-`ScrollCaptureManager` owns the complete scrolling-capture workflow: selected-window overlays, detector and selection state, backdrop/control/thumbnail windows, input monitors, cancellable capture tasks, stable-frame capture, stitching, window-mask resizing, preview updates, and teardown. It passes only the completed image and original frame to `CaptureManager` so scrolling results use the shared standalone editor and latest-capture lifecycle.
+`ScrollCaptureManager` owns the complete scrolling-capture workflow: selected-window overlays, detector and selection state, backdrop/control/thumbnail windows, input monitors, cancellable capture tasks, stable-frame capture, stitching, window-mask resizing, preview updates, and teardown. It passes only the completed image and original frame to `CaptureResultManager` so scrolling results use the shared standalone editor and latest-capture lifecycle.
 
 ### Scrolling capture components
 
 - `ScrollCaptureStitcher` diffs each adjacent stable pair, merges changed components into one content region, uses a padded copy of that region for confidence-scored 2D translation matching, and places only newly exposed region rectangles at accumulated global canvas offsets. Full-window and inner-pane scrolling use the same composition path; pixels outside the content region are emitted once.
-- `ScrollCaptureManager` captures the selected window through ScreenCaptureKit, observes horizontal or vertical user scrolling input, debounces it, waits for two stable frames, and submits accepted frames to the stitcher. It applies a nine-slice-resized selected-window alpha mask to the completed bitmap before presenting the editor through `CaptureManager`.
+- `ScrollCaptureManager` captures the selected window through ScreenCaptureKit, observes horizontal or vertical user scrolling input, debounces it, waits for two stable frames, and submits accepted frames to the stitcher. It applies a nine-slice-resized selected-window alpha mask to the completed bitmap before presenting the editor through `CaptureResultManager`.
 - `ScrollCaptureBackdropView` renders the selected-rectangle cutout in click-through per-display windows while scrolling remains under user control.
 
 The implementation does not generate input, move the pointer, inspect application documents, or require Accessibility access. Capture remains selected-window-only, while stitching accepts horizontal, vertical, and combined 2D movement.

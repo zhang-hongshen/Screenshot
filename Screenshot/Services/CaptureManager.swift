@@ -8,17 +8,13 @@ final class CaptureManager {
 
     private var overlayWindows: [CaptureOverlayWindow] = []
     private var transitionWindow: CaptureOverlayWindow?
-    private var previewWindow: CapturePreviewWindow?
-    private var editorWindow: AnnotationEditorWindow?
-    private var latestCaptureImage: NSImage?
-    private var latestCaptureFrame: CGRect?
     private var overlayDetector: WindowDetector?
     private var regionSelection: RegionSelection?
     private var overlayDetectionTask: Task<Void, Never>?
     private var escapeMonitor: Any?
     private var captureTask: Task<Void, Never>?
     private var captureID: UUID?
-    private let annotationService = AnnotationEditorService()
+    private let resultManager = CaptureResultManager.shared
 
     var hasActiveCapture: Bool {
         !overlayWindows.isEmpty || transitionWindow != nil || captureTask != nil
@@ -26,13 +22,13 @@ final class CaptureManager {
 
     func start() {
         guard !ScrollCaptureManager.shared.isActive else { return }
-        if previewWindow != nil || editorWindow != nil || latestCaptureImage != nil {
+        if resultManager.hasCapture {
             discardActiveCapture()
         }
         guard overlayWindows.isEmpty,
               transitionWindow == nil,
               captureTask == nil else { return }
-        discardReopenableCapture()
+        resultManager.discard()
         captureID = nil
 
         let screens = NSScreen.screens
@@ -82,20 +78,8 @@ final class CaptureManager {
     func reopenLastCapture() {
         guard overlayWindows.isEmpty,
               transitionWindow == nil,
-              captureTask == nil,
-              editorWindow == nil,
-              let image = latestCaptureImage else { return }
-        presentEditor(image: image)
-    }
-
-    func prepareForNewCapture() {
-        discardActiveCapture()
-    }
-
-    func presentCompletedCapture(image: NSImage, frame: CGRect) {
-        latestCaptureImage = image
-        latestCaptureFrame = frame
-        presentEditor(image: image)
+              captureTask == nil else { return }
+        resultManager.reopen()
     }
 
     /// Takes ownership of the operation before the overlay's SwiftUI hierarchy is destroyed.
@@ -165,7 +149,7 @@ final class CaptureManager {
                 let cgImage = try await ScreenCaptureService.captureRegion(frame)
                 try Task.checkCancellation()
                 let image = NSImage(cgImage: cgImage, size: frame.size)
-                retainedWindow.overlayState.pixelatedImage = annotationService
+                retainedWindow.overlayState.pixelatedImage = resultManager
                     .pixelatedImage(for: image)
                 retainedWindow.overlayState.windowMask = windowMask
                 retainedWindow.overlayState.isEditing = true
@@ -206,9 +190,9 @@ final class CaptureManager {
                 let cgImage = try await ScreenCaptureService.captureRegion(rect)
                 try Task.checkCancellation()
                 let image = NSImage(cgImage: cgImage, size: rect.size)
-                let pixelatedImage = annotationService.pixelatedImage(for: image)
+                let pixelatedImage = resultManager.pixelatedImage(for: image)
                 let maskImage = windowMask.map { NSImage(cgImage: $0, size: rect.size) }
-                guard let result = annotationService.renderedImage(
+                guard let result = resultManager.renderedImage(
                     image: image,
                     pixelatedImage: pixelatedImage,
                     annotations: annotations,
@@ -224,18 +208,18 @@ final class CaptureManager {
 
                 switch action {
                 case .copy:
-                    annotationService.copy(image: result)
+                    resultManager.copy(image: result)
                 case .save:
-                    if annotationService.save(image: result) {
+                    if resultManager.save(image: result) {
                         finishAnnotation()
-                        showPreview(image: result, frame: rect)
+                        resultManager.showPreview(image: result, frame: rect)
                     }
                 case .share:
-                    annotationService.share(image: result)
+                    resultManager.share(image: result)
                 case .finish:
-                    annotationService.copy(image: result)
+                    resultManager.copy(image: result)
                     finishAnnotation()
-                    showPreview(image: result, frame: rect)
+                    resultManager.showPreview(image: result, frame: rect)
                 }
             } catch is CancellationError {
                 return
@@ -246,133 +230,13 @@ final class CaptureManager {
         }
     }
 
-    private func showPreview(image: NSImage, frame: CGRect) {
-        previewWindow?.close()
-        latestCaptureImage = image
-        latestCaptureFrame = frame
-
-        let screen = NSScreen.screens.max {
-            $0.frame.intersection(frame).area < $1.frame.intersection(frame).area
-        } ?? NSScreen.main
-        guard let screen else { return }
-
-        let width: CGFloat = 360
-        let aspectRatio = image.size.width / max(1, image.size.height)
-        let imageHeight = min(220, max(120, width / max(0.1, aspectRatio)))
-        let size = CGSize(width: width, height: imageHeight + 24)
-        let origin = CGPoint(
-            x: screen.visibleFrame.maxX - size.width - 20,
-            y: screen.visibleFrame.minY + 20
-        )
-        let window = CapturePreviewWindow(contentRect: CGRect(origin: origin, size: size))
-        window.contentView = NSHostingView(rootView: CapturePreviewView(
-            image: image,
-            openEditor: { [weak self] in self?.openEditor() },
-            dismiss: { [weak self] in self?.dismissPreview() }
-        ))
-        previewWindow = window
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private func openEditor() {
-        previewWindow?.close()
-        previewWindow = nil
-        guard let image = latestCaptureImage else { return }
-        presentEditor(image: image)
-    }
-
-    private func presentEditor(image: NSImage) {
-        if let editorWindow {
-            editorWindow.makeKeyAndOrderFront(nil)
-            return
-        }
-        let screen = latestCaptureFrame.flatMap { captureFrame in
-            NSScreen.screens.max {
-                $0.frame.intersection(captureFrame).area < $1.frame.intersection(captureFrame).area
-            }
-        } ?? NSScreen.main
-        guard let screen else { return }
-
-        let visibleFrame = screen.visibleFrame
-        let size = CGSize(
-            width: min(1200, visibleFrame.width * 0.8),
-            height: min(900, visibleFrame.height * 0.8)
-        )
-        let origin = CGPoint(
-            x: visibleFrame.midX - size.width / 2,
-            y: visibleFrame.midY - size.height / 2
-        )
-        let pixelatedImage = annotationService.pixelatedImage(for: image)
-        let window = AnnotationEditorWindow(contentRect: CGRect(origin: origin, size: size))
-        window.contentView = NSHostingView(rootView: AnnotationEditorView(
-            image: image,
-            pixelatedImage: pixelatedImage,
-            commandState: window.commandState,
-            copy: { [weak self] annotations in
-                self?.annotationService.copy(
-                    image: image,
-                    pixelatedImage: pixelatedImage,
-                    annotations: annotations
-                )
-            },
-            finish: { [weak self] annotations in
-                self?.completeEditor(
-                    action: .finish,
-                    image: image,
-                    pixelatedImage: pixelatedImage,
-                    annotations: annotations
-                )
-            }
-        ))
-        window.onClose = { [weak self, weak window] in
-            guard self?.editorWindow === window else { return }
-            self?.editorWindow = nil
-        }
-        editorWindow = window
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private func completeEditor(
-        action: ExportAction,
-        image: NSImage,
-        pixelatedImage: NSImage,
-        annotations: [Annotation]
-    ) {
-        guard let result = annotationService.renderedImage(
-            image: image,
-            pixelatedImage: pixelatedImage,
-            annotations: annotations
-        ) else { return }
-
-        switch action {
-        case .save:
-            guard annotationService.save(image: result) else { return }
-        case .finish:
-            annotationService.copy(image: result)
-        case .copy, .share:
-            return
-        }
-
-        let frame = latestCaptureFrame ?? editorWindow?.frame ?? .zero
-        editorWindow?.close()
-        editorWindow = nil
-        showPreview(image: result, frame: frame)
-    }
-
-    private func dismissPreview() {
-        previewWindow?.close()
-        previewWindow = nil
-    }
-
     /// AppKit can still be dispatching the keyboard or mouse event that requested
     /// dismissal. Hide immediately, then tear down the window on the next run-loop turn.
     private func closeOverlayAfterCurrentEvent() {
         let windows = overlayWindows + [transitionWindow].compactMap { $0 }
         overlayWindows.removeAll()
         transitionWindow = nil
-        previewWindow?.close()
-        previewWindow = nil
+        resultManager.dismissPreview()
         stopCaptureInteraction()
         windows.forEach { $0.orderOut(nil) }
 
@@ -390,22 +254,13 @@ final class CaptureManager {
         removeKeyboardMonitor()
     }
 
-    private func discardReopenableCapture() {
-        editorWindow?.close()
-        editorWindow = nil
-        latestCaptureImage = nil
-        latestCaptureFrame = nil
-    }
-
     private func discardActiveCapture() {
         captureTask?.cancel()
         captureTask = nil
         captureID = nil
-        previewWindow?.close()
-        previewWindow = nil
         overlayWindows.forEach { $0.close() }
         overlayWindows.removeAll()
-        discardReopenableCapture()
+        resultManager.discard()
         stopCaptureInteraction()
     }
 
@@ -458,13 +313,6 @@ final class CaptureManager {
         alert.messageText = "Unable to capture the screen"
         alert.informativeText = "\(error.localizedDescription)\n\(nsError.domain) (\(nsError.code))"
         alert.runModal()
-    }
-}
-
-private extension CGRect {
-    var area: CGFloat {
-        guard !isNull else { return 0 }
-        return width * height
     }
 }
 

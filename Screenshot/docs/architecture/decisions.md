@@ -24,6 +24,13 @@ ScreenCaptureKit window acquisition and multi-display region compositing live in
 Reason:
 Keep platform capture mechanics cohesive and reusable while preserving distinct standard and scrolling workflow ownership.
 
+### Completed Capture Result Boundary
+
+The latest completed image and frame, preview panel, standalone editor window, reopen lifecycle, annotation rendering, and copy/save/share integrations are owned by `CaptureResultManager`. Standard and scrolling managers own their active capture sessions and hand completed images to this shared result boundary.
+
+Reason:
+Separate active capture orchestration from completed-output state and keep AppKit result presentation from accumulating in either capture workflow manager.
+
 ### Annotation Features Own Their UI and Operations
 
 Shape, Text, and Blur/Redaction are separate feature folders. Each folder owns

@@ -50,8 +50,9 @@ Screenshot/
 
 System-facing and workflow coordination code lives here.
 
-- `CaptureManager.swift` is the main-actor singleton for standard window/region capture, preview, editor, export, and the last completed capture.
-- `ScrollCaptureManager.swift` is the main-actor singleton for scrolling-window selection, scrolling UI windows, input monitoring, stable-frame capture, stitching, masking, and scrolling-session teardown. It hands completed images to `CaptureManager` for the shared editor/output lifecycle.
+- `CaptureManager.swift` is the main-actor singleton for standard window/region selection, capture tasks, in-place editing, and live-overlay export coordination.
+- `ScrollCaptureManager.swift` is the main-actor singleton for scrolling-window selection, scrolling UI windows, input monitoring, stable-frame capture, stitching, masking, and scrolling-session teardown.
+- `CaptureResultManager.swift` owns the latest completed image, preview and standalone editor windows, reopen lifecycle, annotation rendering, and copy/save/share integrations shared by both capture workflows.
 - `ScreenCaptureService.swift` owns stateless ScreenCaptureKit window acquisition and multi-display region compositing shared by the workflow managers.
 - `WindowDetector.swift` polls ScreenCaptureKit shareable content and Core Graphics window ordering to identify the frontmost eligible window under the pointer.
 - `ScreenCoordinates.swift` centralizes conversions among AppKit's bottom-left global coordinates, ScreenCaptureKit's top-left coordinates, per-screen source rectangles, and SwiftUI overlay coordinates.
@@ -119,7 +120,8 @@ The intended dependency flow is:
 ScreenshotApp
     → CaptureManager / ScrollCaptureManager
         → Overlay / Preview / Annotation windows and views
-        → WindowDetector / ScreenCaptureService / ScreenCoordinates / AnnotationEditorService
+        → CaptureResultManager / WindowDetector / ScreenCaptureService / ScreenCoordinates
+            → AnnotationEditorService
         → ScreenCaptureKit and AppKit integrations
 
 Overlay and standalone editor views
@@ -129,4 +131,4 @@ Settings
     → KeyboardShortcuts
 ```
 
-Views call `CaptureManager.shared` for standard capture/export actions and `ScrollCaptureManager.shared` for scrolling capture. `ScrollCaptureManager` depends on `CaptureManager` only to clear or present the shared latest-capture/editor lifecycle.
+Views call `CaptureManager.shared` for standard capture/export actions and `ScrollCaptureManager.shared` for scrolling capture. Both workflow managers hand completed images to `CaptureResultManager`, which owns the shared latest-capture, preview, editor, and reopen lifecycle.

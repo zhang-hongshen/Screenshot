@@ -147,7 +147,8 @@ There are no settings for output location, preview behavior, cursor capture, ima
 
 ## State and Concurrency
 
-- `CaptureManager`, `ScrollCaptureManager`, `ScreenCaptureService`, `WindowDetector`, `RegionSelection`, `AnnotationDocument`, and `AnnotationEditorService` are main-actor isolated, directly or through project-wide default isolation.
+- `CaptureManager`, `ScrollCaptureManager`, `CaptureResultManager`, `ScreenCaptureService`, `WindowDetector`, `RegionSelection`, `AnnotationDocument`, and `AnnotationEditorService` are main-actor isolated, directly or through project-wide default isolation.
+- `CaptureResultManager` owns the latest completed image and frame, preview/editor presentation, reopen state, annotation rendering, and output integrations shared by standard and scrolling capture.
 - Observation uses `@Observable` for shared mutable models and SwiftUI `@State` for view-local editor state.
 - Window detection and capture use retained cancellable tasks.
 - `ScrollCaptureManager` owns scrolling selection, backdrop/control/thumbnail windows, ScreenCaptureKit frame capture, stitching, masking, and a cancellable debounce task plus global scroll and key monitors that are removed when the session finishes or is cancelled.

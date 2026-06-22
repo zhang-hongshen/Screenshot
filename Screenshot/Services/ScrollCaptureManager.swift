@@ -35,7 +35,7 @@ final class ScrollCaptureManager {
 
     func start() {
         guard !isActive, !CaptureManager.shared.hasActiveCapture else { return }
-        CaptureManager.shared.prepareForNewCapture()
+        CaptureResultManager.shared.discard()
 
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return }
@@ -139,7 +139,7 @@ final class ScrollCaptureManager {
             )
         )
         tearDown()
-        CaptureManager.shared.presentCompletedCapture(image: result, frame: frame)
+        CaptureResultManager.shared.presentCompletedCapture(image: result, frame: frame)
     }
 
     func cancel() {

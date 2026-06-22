@@ -1,6 +1,6 @@
 # Implementation Todo
 
-`CaptureManager` now owns standard capture and output workflows, while `ScrollCaptureManager` owns the complete scrolling-capture workflow and state.
+`CaptureManager` now owns the standard capture workflow, `ScrollCaptureManager` owns the complete scrolling-capture workflow and state, and `CaptureResultManager` owns completed-output state and presentation shared by both.
 Stateless ScreenCaptureKit image acquisition and multi-display compositing now live in `ScreenCaptureService` rather than workflow managers.
 
 ## Completed
