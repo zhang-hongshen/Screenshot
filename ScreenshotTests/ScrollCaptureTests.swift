@@ -28,6 +28,31 @@ struct ScrollCaptureTests {
         #expect(result == source)
     }
 
+    /// Content scrolled up slides in under a translucent toolbar (Liquid Glass). The toolbar is kept
+    /// once, from the first frame, instead of being repeated over every newly revealed strip.
+    @Test func stitcherKeepsTranslucentToolbarOnce() throws {
+        let document = Pattern(width: 400, height: 2000)
+        let label = Pattern(width: 60, height: 20)
+        let barHeight = 40
+
+        func frame(offset: Int) -> Pattern {
+            var frame = document.crop(x: 0, y: offset, width: 400, height: 600)
+            frame.paste(frame.crop(x: 0, y: 0, width: 400, height: barHeight).frosted(), x: 0, y: 0)
+            frame.paste(label, x: 170, y: 10)
+            return frame
+        }
+
+        var stitcher = ScrollCaptureStitcher()
+        for offset in [1000, 880, 760, 640] {
+            #expect(stitcher.append(frame(offset: offset).image) == .appended)
+        }
+
+        let result = Pattern(stitcher.makeImage()!)
+        try #require(result.height == barHeight + 920)
+        #expect(result.crop(x: 0, y: 0, width: 400, height: barHeight) == frame(offset: 1000).crop(x: 0, y: 0, width: 400, height: barHeight))
+        #expect(result.crop(x: 0, y: barHeight, width: 400, height: 920) == document.crop(x: 0, y: 680, width: 400, height: 920))
+    }
+
     /// A sidebar and a document scrolled one after the other end up side by side at full length,
     /// with the toolbar above them and the status bar moved below the longer one.
     @Test func canvasShowsEveryScrolledPaneAtFullLength() {
@@ -177,6 +202,14 @@ private struct Pattern: Equatable {
             cropped += pixels[start..<(start + width * 4)]
         }
         return Pattern(width: width, height: height, pixels: cropped)
+    }
+
+    /// The picture seen through frosted glass: faded towards gray, but still following what is under it.
+    func frosted() -> Pattern {
+        let faded = pixels.enumerated().map { index, value in
+            index % 4 == 3 ? value : UInt8((Int(value) + 2 * 128) / 3)
+        }
+        return Pattern(width: width, height: height, pixels: faded)
     }
 
     mutating func paste(_ other: Pattern, x: Int, y: Int) {

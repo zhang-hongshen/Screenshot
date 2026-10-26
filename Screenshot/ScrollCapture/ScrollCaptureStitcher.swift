@@ -87,6 +87,10 @@ nonisolated struct ScrollCaptureStitcher {
     private static let coarseCandidateCount = 3
     /// Largest mean gray difference (0–255) still accepted as the same content after moving.
     private static let maximumDifference: Float = 3
+    /// Largest mean gray difference accepted when the move still explains almost all of the change.
+    private static let maximumParallaxDifference: Float = 8
+    /// Largest mean gray difference of a single line that still moved exactly with the content.
+    private static let movedLineDifference: Float = 1
 
     // MARK: - Appending
 
@@ -108,6 +112,7 @@ nonisolated struct ScrollCaptureStitcher {
         // and the other one only when the first does not line up.
         let axes: [Axis] = lastAxis == .horizontal ? [.horizontal, .vertical] : [.vertical, .horizontal]
         var move: (axis: Axis, offset: Int)?
+        var isStill = false
         for axis in axes {
             let band: Range<Int>
             switch axis {
@@ -115,16 +120,35 @@ nonisolated struct ScrollCaptureStitcher {
             case .horizontal: band = hasHorizontalEdges ? scrollingRange(along: .horizontal, size: image.width) : columnBand
             }
             let lastMove = axis == .vertical ? lastOffset?.y : lastOffset?.x
-            if let found = Self.bestMove(from: previousProfiles, to: profiles, along: axis, band: band, lastMove: lastMove),
-               found.difference <= Self.maximumDifference {
+            guard let found = Self.bestMove(from: previousProfiles, to: profiles, along: axis, band: band, lastMove: lastMove),
+                  let stillDifference = Self.difference(
+                      previousProfiles.exact(along: axis),
+                      profiles.exact(along: axis),
+                      band: band,
+                      shift: 0
+                  ) else { continue }
+            // A video or animation changes pixels in place; when the frames match better
+            // unmoved, nothing scrolled along this axis, and a 1-pixel "move" would repeat a line.
+            if stillDifference <= found.difference {
+                isStill = true
+                continue
+            }
+            if Self.isScroll(difference: found.difference, stillDifference: stillDifference) {
                 move = (axis, found.offset)
                 break
             }
         }
-        guard let move else { return .noOverlap }
+        guard let move else { return isStill ? .unchanged : .noOverlap }
 
         var updated = self
-        updated.learnFixedEdges(along: move.axis, rowBand: rowBand, columnBand: columnBand, frame: image)
+        updated.learnFixedEdges(
+            along: move.axis,
+            offset: move.offset,
+            rowBand: rowBand,
+            columnBand: columnBand,
+            previous: previousProfiles,
+            current: profiles
+        )
         let previousOrigin = origin
         switch move.axis {
         case .vertical: updated.origin.y += CGFloat(move.offset)
@@ -146,19 +170,80 @@ nonisolated struct ScrollCaptureStitcher {
     }
 
     /// The first move along an axis shows which edges stay put; they are kept once, from the first frame.
-    private mutating func learnFixedEdges(along axis: Axis, rowBand: Range<Int>, columnBand: Range<Int>, frame: CGImage) {
+    private mutating func learnFixedEdges(
+        along axis: Axis,
+        offset: Int,
+        rowBand: Range<Int>,
+        columnBand: Range<Int>,
+        previous: Profiles,
+        current: Profiles
+    ) {
         switch axis {
         case .vertical where !hasVerticalEdges:
-            fixedEdges.top = CGFloat(rowBand.lowerBound)
-            fixedEdges.bottom = CGFloat(frame.height - rowBand.upperBound)
+            let band = Self.movingBand(previous.rows, current.rows, changedBand: rowBand, shift: offset)
+            fixedEdges.top = CGFloat(band.lowerBound)
+            fixedEdges.bottom = CGFloat(current.rows.lineCount - band.upperBound)
             hasVerticalEdges = true
         case .horizontal where !hasHorizontalEdges:
-            fixedEdges.left = CGFloat(columnBand.lowerBound)
-            fixedEdges.right = CGFloat(frame.width - columnBand.upperBound)
+            let band = Self.movingBand(previous.columns, current.columns, changedBand: columnBand, shift: offset)
+            fixedEdges.left = CGFloat(band.lowerBound)
+            fixedEdges.right = CGFloat(current.columns.lineCount - band.upperBound)
             hasHorizontalEdges = true
         default:
             break
         }
+    }
+
+    /// The changed lines that really moved with the content. A translucent bar over the content
+    /// (a Liquid Glass toolbar) changes too, as the content slides under it, but its lines do not
+    /// line up after the move, so it is left out and kept once, like an opaque bar.
+    private static func movingBand(_ previous: Profile, _ current: Profile, changedBand: Range<Int>, shift: Int) -> Range<Int> {
+        // A line moved when the content it shows now sat `shift` lines further in the previous frame,
+        // or when what it showed before sits `shift` lines back now. Near an edge only one of the
+        // two exists, which is enough to tell a bar from content entering the view.
+        func moved(_ line: Int) -> Bool {
+            var comparisons: [Float] = []
+            if let difference = lineDifference(current, line, previous, line + shift) {
+                comparisons.append(difference)
+            }
+            if let difference = lineDifference(previous, line, current, line - shift) {
+                comparisons.append(difference)
+            }
+            // Blurred content looks much like the sharp content it covers, so only lines that
+            // are almost exactly the same count as moved.
+            return comparisons.contains { $0 <= movedLineDifference }
+        }
+        // Bars are short. A longer run of lines that did not move is a picture changing on its own
+        // (a video, a parallax card), which is part of the content.
+        let longestBar = changedBand.count / 4
+        let runLength = 16
+        var start = changedBand.lowerBound
+        var run = 0
+        for line in changedBand.prefix(longestBar + runLength) {
+            run = moved(line) ? run + 1 : 0
+            if run == runLength {
+                start = line - runLength + 1
+                break
+            }
+        }
+        var end = changedBand.upperBound
+        run = 0
+        for line in changedBand.suffix(longestBar + runLength).reversed() where line >= start {
+            run = moved(line) ? run + 1 : 0
+            if run == runLength {
+                end = line + runLength
+                break
+            }
+        }
+        return start..<end
+    }
+
+    /// Mean gray difference between one line of each profile, or nil when a line is outside its profile.
+    private static func lineDifference(_ first: Profile, _ firstLine: Int, _ second: Profile, _ secondLine: Int) -> Float? {
+        guard (0..<first.lineCount).contains(firstLine), (0..<second.lineCount).contains(secondLine) else { return nil }
+        let firstValues = first.lines(firstLine..<(firstLine + 1))
+        let secondValues = second.lines(secondLine..<(secondLine + 1))
+        return vDSP.sumOfMagnitudes(vDSP.subtract(firstValues, secondValues)) / Float(firstValues.count)
     }
 
     /// Keeps the parts of the frame's scrolling area that the previous frame did not show.
@@ -277,6 +362,13 @@ nonisolated struct ScrollCaptureStitcher {
     }
 
     // MARK: - Measuring the move
+
+    /// A move is accepted when it leaves the frames nearly the same, or, on pages whose pictures
+    /// move at their own speed (parallax cards in the App Store), when it explains almost all of the change.
+    private static func isScroll(difference: Float, stillDifference: Float) -> Bool {
+        difference <= maximumDifference
+            || (difference <= maximumParallaxDifference && difference * 5 <= stillDifference)
+    }
 
     /// Slides the current lines along the previous ones inside `band` and returns the best offset.
     /// An offset `s` means current line `y` shows what previous line `y + s` showed.

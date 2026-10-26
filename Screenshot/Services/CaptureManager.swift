@@ -40,7 +40,7 @@ final class CaptureManager {
 
         overlayWindows = screens.map { screen in
             let window = CaptureWindow(screen: screen)
-            window.contentView = NSHostingView(rootView: CaptureView(
+            window.contentView = CaptureHostingView(rootView: CaptureView(
                 screenFrame: screen.frame,
                 detector: detector,
                 selection: selection,
