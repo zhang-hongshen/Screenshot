@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		703943732FE43D2C008D165A /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 703943722FE43D2C008D165A /* KeyboardShortcuts */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		7039434A2FE43AFD008D165A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -29,6 +33,17 @@
 		703943532FE43AFD008D165A /* ScreenshotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScreenshotUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		70B6E6F32FE7F212007C9255 /* Exceptions for "ScreenshotTests" folder in "Screenshot" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				TestResources/1.jpg,
+				TestResources/2.jpg,
+			);
+			target = 703943392FE43AFB008D165A /* Screenshot */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7039433C2FE43AFB008D165A /* Screenshot */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -37,12 +52,10 @@
 		};
 		7039434C2FE43AFD008D165A /* ScreenshotTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				70B6E6F32FE7F212007C9255 /* Exceptions for "ScreenshotTests" folder in "Screenshot" target */,
+			);
 			path = ScreenshotTests;
-			sourceTree = "<group>";
-		};
-		703943562FE43AFD008D165A /* ScreenshotUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ScreenshotUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +65,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				703943732FE43D2C008D165A /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,7 +91,6 @@
 			children = (
 				7039433C2FE43AFB008D165A /* Screenshot */,
 				7039434C2FE43AFD008D165A /* ScreenshotTests */,
-				703943562FE43AFD008D165A /* ScreenshotUITests */,
 				7039433B2FE43AFB008D165A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -112,6 +125,7 @@
 			);
 			name = Screenshot;
 			packageProductDependencies = (
+				703943722FE43D2C008D165A /* KeyboardShortcuts */,
 			);
 			productName = Screenshot;
 			productReference = 7039433A2FE43AFB008D165A /* Screenshot.app */;
@@ -153,9 +167,6 @@
 			dependencies = (
 				703943552FE43AFD008D165A /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				703943562FE43AFD008D165A /* ScreenshotUITests */,
-			);
 			name = ScreenshotUITests;
 			packageProductDependencies = (
 			);
@@ -182,6 +193,7 @@
 					};
 					703943522FE43AFD008D165A = {
 						CreatedOnToolsVersion = 26.5;
+						LastSwiftMigration = 2650;
 						TestTargetID = 703943392FE43AFB008D165A;
 					};
 				};
@@ -195,6 +207,9 @@
 			);
 			mainGroup = 703943312FE43AFB008D165A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				703943712FE43D2C008D165A /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7039433B2FE43AFB008D165A /* Products */;
 			projectDirPath = "";
@@ -408,6 +423,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.zhanghongshen.Screenshot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -440,6 +456,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.zhanghongshen.Screenshot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -461,7 +478,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DTZV6LDYD5;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.zhanghongshen.ScreenshotTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -482,7 +499,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DTZV6LDYD5;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.zhanghongshen.ScreenshotTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -498,16 +515,20 @@
 		703943642FE43AFD008D165A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DTZV6LDYD5;
 				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.zhanghongshen.ScreenshotUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "ScreenshotUITests/ScreenshotUITests-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = Screenshot;
@@ -517,16 +538,19 @@
 		703943652FE43AFD008D165A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DTZV6LDYD5;
 				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.zhanghongshen.ScreenshotUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "ScreenshotUITests/ScreenshotUITests-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = Screenshot;
@@ -573,6 +597,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		703943712FE43D2C008D165A /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.0.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		703943722FE43D2C008D165A /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 703943712FE43D2C008D165A /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 703943322FE43AFB008D165A /* Project object */;
 }

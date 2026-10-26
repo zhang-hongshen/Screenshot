@@ -1,0 +1,43 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode user state
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Build products
+build/
+DerivedData/
+*.xcarchive
+*.xcresult
+*.dmg
+*.ipa
+*.dSYM*
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*~
+
+# AI agent local state (shared instructions live in AGENTS.md / CLAUDE.md)
+.claude/
+
+# Secrets — never commit signing material
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.p8
+.env*
+
+# Icon drafts
+Screenshot/output/

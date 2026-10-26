@@ -1,5 +1,6 @@
 import AppKit
 
+/// Shows capture failures, such as a missing Screen Recording permission, in an alert.
 @MainActor
 enum CaptureErrorPresenter {
     static func present(_ error: Error) {

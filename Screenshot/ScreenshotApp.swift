@@ -1,14 +1,15 @@
-import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
+/// The app lives in the menu bar: no Dock icon, just a menu, global shortcuts,
+/// the Settings window and the markup editor window.
 @main
 struct ScreenshotApp: App {
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
-
         KeyboardShortcuts.onKeyUp(for: .capture) {
             CaptureManager.shared.start()
         }
@@ -18,7 +19,7 @@ struct ScreenshotApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra("Screenshot", image: "MenuBarIcon") {
             Button("Capture") {
                 CaptureManager.shared.start()
             }
@@ -29,9 +30,10 @@ struct ScreenshotApp: App {
             }
             .keyboardShortcut("2", modifiers: .command)
 
-            Button("Open Lastest Capture") {
-                CaptureManager.shared.reopenLastCapture()
+            Button("Open Latest Capture") {
+                openWindow(id: "markup-editor")
             }
+            .disabled(CaptureResultManager.shared.latestImage == nil)
 
             Divider()
 
@@ -46,12 +48,31 @@ struct ScreenshotApp: App {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
-        } label: {
-            Image(systemName: "macwindow")
         }
 
         Settings {
             SettingsView()
         }
+
+        WindowGroup("Screenshot", id: "markup-editor") {
+            if let image = CaptureResultManager.shared.latestImage {
+                MarkupEditorView(image: image)
+                    // A new screenshot gets a new editor with its own markup.
+                    .id(ObjectIdentifier(image))
+                    .frame(minWidth: 820, minHeight: 460)
+            }
+        }
+        .windowResizability(.contentMinSize)
+
+        WindowGroup("Combine Screenshots", id: "collage") {
+            let images = CaptureResultManager.shared.previewImages
+            if images.count >= 2 {
+                CollageEditorView(images: images)
+                    // Screenshots added or closed in the preview start a fresh arrangement.
+                    .id(images.map(ObjectIdentifier.init))
+                    .frame(minWidth: 640, minHeight: 480)
+            }
+        }
+        .windowResizability(.contentMinSize)
     }
 }

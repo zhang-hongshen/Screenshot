@@ -1,181 +1,101 @@
-import AppKit
 import SwiftUI
 
-@MainActor
+/// Keeps the latest finished screenshot and the floating preview in the corner of the screen.
+///
+/// Normal screenshots pile up in the preview so several can be combined into a collage.
+/// `@Observable` lets the preview and the editor windows redraw when the screenshots change.
+@Observable
 final class CaptureResultManager {
     static let shared = CaptureResultManager()
+    static let maximumPreviewCount = 6
 
-    private var previewWindow: CapturePreviewWindow?
-    private var editorWindow: AnnotationEditorWindow?
-    private var latestImage: NSImage?
-    private var latestFrame: CGRect?
-    private let annotationService = AnnotationEditorService()
+    private(set) var latestImage: NSImage?
+    /// The screenshots shown in the corner, oldest first.
+    private(set) var previewImages: [NSImage] = []
+    /// False while the preview shows a scrolling capture, which is never combined.
+    private(set) var canCombinePreview = false
+    @ObservationIgnored private var previewWindow: CapturePreviewWindow?
+    @ObservationIgnored private var previewScreen: NSScreen?
 
-    var hasCapture: Bool {
-        previewWindow != nil || editorWindow != nil || latestImage != nil
-    }
-
-    func reopen() {
-        guard editorWindow == nil, let latestImage else { return }
-        presentEditor(image: latestImage)
-    }
-
-    func presentCompletedCapture(image: NSImage, frame: CGRect) {
+    /// Adds a normal screenshot to the preview, next to the ones already there.
+    func addToPreview(_ image: NSImage, takenAt frame: CGRect) {
+        if !canCombinePreview {
+            previewImages = []
+        }
+        previewImages = Array((previewImages + [image]).suffix(Self.maximumPreviewCount))
+        canCombinePreview = true
         latestImage = image
-        latestFrame = frame
-        presentEditor(image: image)
+        showPreviewWindow(on: ScreenCoordinates.screenContainingMost(ofAppKitRect: frame))
     }
 
-    func showPreview(image: NSImage, frame: CGRect) {
-        previewWindow?.close()
+    /// Shows a scrolling capture on its own.
+    func showPreview(of image: NSImage, takenAt frame: CGRect) {
+        previewImages = [image]
+        canCombinePreview = false
         latestImage = image
-        latestFrame = frame
+        showPreviewWindow(on: ScreenCoordinates.screenContainingMost(ofAppKitRect: frame))
+    }
 
-        let screen = screenContainingMost(of: frame)
-        guard let screen else { return }
+    /// Makes `image` the one the markup editor shows and takes it out of the preview.
+    func openInEditor(_ image: NSImage) {
+        latestImage = image
+        removeFromPreview(image)
+    }
 
-        let width: CGFloat = 360
-        let aspectRatio = image.size.width / max(1, image.size.height)
-        let imageHeight = min(220, max(120, width / max(0.1, aspectRatio)))
-        let size = CGSize(width: width, height: imageHeight + 24)
-        let origin = CGPoint(
-            x: screen.visibleFrame.maxX - size.width - 20,
-            y: screen.visibleFrame.minY + 20
-        )
-        let window = CapturePreviewWindow(contentRect: CGRect(origin: origin, size: size))
-        window.contentView = NSHostingView(rootView: CapturePreviewView(
-            image: image,
-            openEditor: { [weak self] in self?.openEditor() },
-            dismiss: { [weak self] in self?.dismissPreview() }
-        ))
-        previewWindow = window
-        window.makeKeyAndOrderFront(nil)
+    func removeFromPreview(_ image: NSImage) {
+        previewImages.removeAll { $0 === image }
+        if previewImages.isEmpty {
+            dismissPreview()
+        } else {
+            showPreviewWindow(on: previewScreen)
+        }
+    }
+
+    /// The finished collage replaces the screenshots it was made from.
+    func openCollageInEditor(_ collage: NSImage) {
+        dismissPreview()
+        latestImage = collage
     }
 
     func dismissPreview() {
         previewWindow?.close()
         previewWindow = nil
+        previewImages = []
     }
 
     func discard() {
         dismissPreview()
-        editorWindow?.close()
-        editorWindow = nil
         latestImage = nil
-        latestFrame = nil
     }
 
-    func pixelatedImage(for image: NSImage) -> NSImage {
-        annotationService.pixelatedImage(for: image)
-    }
-
-    func renderedImage(
-        image: NSImage,
-        pixelatedImage: NSImage,
-        annotations: [Annotation],
-        maskImage: NSImage? = nil
-    ) -> NSImage? {
-        annotationService.renderedImage(
-            image: image,
-            pixelatedImage: pixelatedImage,
-            annotations: annotations,
-            maskImage: maskImage
-        )
-    }
-
-    func copy(image: NSImage) {
-        annotationService.copy(image: image)
-    }
-
-    func save(image: NSImage) -> Bool {
-        annotationService.save(image: image)
-    }
-
-    func share(image: NSImage) {
-        annotationService.share(image: image)
-    }
-
-    private func openEditor() {
-        dismissPreview()
-        guard let latestImage else { return }
-        presentEditor(image: latestImage)
-    }
-
-    private func presentEditor(image: NSImage) {
-        if let editorWindow {
-            editorWindow.makeKeyAndOrderFront(nil)
-            return
-        }
-        let screen = latestFrame.flatMap(screenContainingMost(of:)) ?? NSScreen.main
+    /// Fits the panel to the thumbnails, keeping it in the bottom right corner of the screen.
+    private func showPreviewWindow(on screen: NSScreen?) {
         guard let screen else { return }
-
-        let visibleFrame = screen.visibleFrame
+        previewScreen = screen
+        let margin: CGFloat = 20
+        let contentSize = CapturePreviewView.size(
+            for: previewImages,
+            showsCombineButton: canCombinePreview
+        )
         let size = CGSize(
-            width: min(1200, visibleFrame.width * 0.8),
-            height: min(900, visibleFrame.height * 0.8)
+            width: contentSize.width,
+            height: min(contentSize.height, screen.visibleFrame.height - 2 * margin)
         )
-        let origin = CGPoint(
-            x: visibleFrame.midX - size.width / 2,
-            y: visibleFrame.midY - size.height / 2
+        let frame = CGRect(
+            origin: CGPoint(
+                x: screen.visibleFrame.maxX - size.width - margin,
+                y: screen.visibleFrame.minY + margin
+            ),
+            size: size
         )
-        let pixelatedImage = annotationService.pixelatedImage(for: image)
-        let window = AnnotationEditorWindow(contentRect: CGRect(origin: origin, size: size))
-        window.contentView = NSHostingView(rootView: AnnotationEditorView(
-            image: image,
-            pixelatedImage: pixelatedImage,
-            commandState: window.commandState,
-            copy: { [weak self] annotations in
-                self?.annotationService.copy(
-                    image: image,
-                    pixelatedImage: pixelatedImage,
-                    annotations: annotations
-                )
-            },
-            finish: { [weak self] annotations in
-                self?.completeEditor(
-                    image: image,
-                    pixelatedImage: pixelatedImage,
-                    annotations: annotations
-                )
-            }
-        ))
-        window.onClose = { [weak self, weak window] in
-            guard self?.editorWindow === window else { return }
-            self?.editorWindow = nil
+
+        if let previewWindow {
+            previewWindow.setFrame(frame, display: true)
+        } else {
+            let window = CapturePreviewWindow(contentRect: frame)
+            window.contentView = NSHostingView(rootView: CapturePreviewView(manager: self))
+            previewWindow = window
         }
-        editorWindow = window
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private func completeEditor(
-        image: NSImage,
-        pixelatedImage: NSImage,
-        annotations: [Annotation]
-    ) {
-        guard let result = annotationService.renderedImage(
-            image: image,
-            pixelatedImage: pixelatedImage,
-            annotations: annotations
-        ) else { return }
-
-        annotationService.copy(image: result)
-        let frame = latestFrame ?? editorWindow?.frame ?? .zero
-        editorWindow?.close()
-        editorWindow = nil
-        showPreview(image: result, frame: frame)
-    }
-
-    private func screenContainingMost(of frame: CGRect) -> NSScreen? {
-        NSScreen.screens.max {
-            $0.frame.intersection(frame).area < $1.frame.intersection(frame).area
-        } ?? NSScreen.main
-    }
-}
-
-private extension CGRect {
-    var area: CGFloat {
-        guard !isNull else { return 0 }
-        return width * height
+        previewWindow?.makeKeyAndOrderFront(nil)
     }
 }

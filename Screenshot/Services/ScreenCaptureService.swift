@@ -1,7 +1,9 @@
 import AppKit
 import ScreenCaptureKit
 
+/// Takes pictures of windows and screen regions with ScreenCaptureKit.
 enum ScreenCaptureService {
+
     static func captureWindow(_ window: SCWindow) async throws -> CGImage {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCStreamConfiguration()
@@ -23,8 +25,9 @@ enum ScreenCaptureService {
         return image
     }
 
-    static func captureRegion(_ selection: CGRect) async throws -> CGImage {
-        let content = try await SCShareableContent.current
+    /// Pass `content` when capturing the same region again and again: looking it up is slow.
+    static func captureRegion(_ selection: CGRect, content: SCShareableContent? = nil) async throws -> CGImage {
+        let content = if let content { content } else { try await SCShareableContent.current }
         let currentProcessID = ProcessInfo.processInfo.processIdentifier
         let excludedApplications = content.applications.filter {
             $0.processID == currentProcessID
@@ -51,7 +54,7 @@ enum ScreenCaptureService {
             )
             return max(1, CGFloat(filter.pointPixelScale))
         }.max() ?? 1
-        var pieces: [(appKitRect: CGRect, image: CGImage)] = []
+        var pieces: [ScreenCaptureRegionCompositor.Piece] = []
 
         for part in screenParts {
             try Task.checkCancellation()
@@ -80,31 +83,17 @@ enum ScreenCaptureService {
                 contentFilter: filter,
                 configuration: configuration
             )
-            pieces.append((part.intersection, image))
-        }
-
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                data: nil,
-                width: max(1, Int((selection.width * outputScale).rounded())),
-                height: max(1, Int((selection.height * outputScale).rounded())),
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: colorSpace,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              ) else { throw ScreenCaptureServiceError.cannotCreateCanvas }
-
-        context.interpolationQuality = .high
-        for piece in pieces {
-            context.draw(piece.image, in: CGRect(
-                x: (piece.appKitRect.minX - selection.minX) * outputScale,
-                y: (piece.appKitRect.minY - selection.minY) * outputScale,
-                width: piece.appKitRect.width * outputScale,
-                height: piece.appKitRect.height * outputScale
+            pieces.append(ScreenCaptureRegionCompositor.Piece(
+                appKitRect: part.intersection,
+                image: image
             ))
         }
-        guard let image = context.makeImage() else { throw ScreenCaptureServiceError.noImage }
-        return image
+
+        return try ScreenCaptureRegionCompositor.compose(
+            selection: selection,
+            outputScale: outputScale,
+            pieces: pieces
+        )
     }
 }
 
@@ -118,17 +107,11 @@ private extension ScreenCaptureService {
 
 private enum ScreenCaptureServiceError: LocalizedError {
     case noDisplay
-    case cannotCreateCanvas
-    case noImage
 
     var errorDescription: String? {
         switch self {
         case .noDisplay:
             "The selected region does not intersect an available display."
-        case .cannotCreateCanvas:
-            "The combined screenshot canvas could not be created."
-        case .noImage:
-            "ScreenCaptureKit did not return an image."
         }
     }
 }
