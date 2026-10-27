@@ -14,6 +14,11 @@ final class ImageExportService {
         NSPasteboard.general.writeObjects([image])
     }
 
+    func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     /// Asks where to save and writes a PNG. Returns false when the user cancels or writing fails.
     @discardableResult
     func save(_ image: NSImage) -> Bool {

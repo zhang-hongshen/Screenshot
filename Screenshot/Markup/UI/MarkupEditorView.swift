@@ -34,6 +34,7 @@ struct MarkupEditorView: View {
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItemGroup(placement: .primaryAction) {
+                ExtractTextButton(image: image)
                 MarkupExportControls(
                     copy: { export { ImageExportService.shared.copy($0) } },
                     save: { export { ImageExportService.shared.save($0) } },

@@ -11,11 +11,12 @@ Screenshot is a native macOS menu bar app for taking screenshots, targeting macO
 - **Scrolling capture (the main feature)**: the user scrolls a window or region and the result shows it **as if it sat on an endless screen**. Every scroll area (sidebar, document, inspector) appears at its full length and width, side by side, with the window's toolbars and status bars around them
 - **Preview and editor**: after Finish, a floating thumbnail appears; clicking it, or *Open Latest Capture*, opens the latest screenshot in a markup window
 - **Collage**: normal screenshots pile up in the corner preview (at most 6). *Combine* opens a canvas where the user drags them into place (edges snap together); the result is the rectangle around them, transparent where nothing covers it, and opens in the markup window. Scrolling captures are shown on their own and never combined
-- Screenshots live only in memory, in the corner preview and the editor. No history, cloud, OCR or screen recording
+- **Extract Text**: in either markup editor, *Extract Text* (⇧⌘C) reads the text in the screenshot (a selection or a long scrolling capture) with Vision and copies it, so chat logs, error alerts and documents need not be typed out
+- Screenshots live only in memory, in the corner preview and the editor. No history, cloud or screen recording
 
 ## Design Principles
 
-1. **Native first**: SwiftUI for UI, ScreenCaptureKit for pixels, PaperKit for markup, Core Graphics for image work, Accessibility only where scrolling needs it. The only third-party package is `KeyboardShortcuts` (global hotkeys and their recorder; the system's only built-in alternative is the old Carbon `RegisterEventHotKey`). Adding any other dependency needs the repository owner's approval.
+1. **Native first**: SwiftUI for UI, ScreenCaptureKit for pixels, PaperKit for markup, Vision for text, Core Graphics for image work, Accessibility only where scrolling needs it. The only third-party package is `KeyboardShortcuts` (global hotkeys and their recorder; the system's only built-in alternative is the old Carbon `RegisterEventHotKey`). Adding any other dependency needs the repository owner's approval.
 2. **Never fight the user**: Screenshot never moves the pointer, never consumes the user's input and never synthesizes input during manual capture. It only watches.
 3. **What you scrolled is what you get**: scrolling capture records exactly what the user scrolled through. Automatic scrolling must not make the page load more than it showed when capture started (see Known Issues).
 
@@ -34,7 +35,7 @@ Screenshot/
 ├── Preview/              floating thumbnails after captures
 ├── Collage/              CollageArrangement (positions, snapping), CollageRenderer, CollageEditorView
 ├── Services/             CaptureManager, CaptureResultManager, ScreenCaptureService, ScreenCoordinates,
-│                         WindowDetector, MarkupRenderer, ImageExportService, CaptureErrorPresenter
+│                         WindowDetector, MarkupRenderer, TextRecognizer, ImageExportService, CaptureErrorPresenter
 ├── Settings/             Shortcuts and General (Open at Login) tabs
 └── Extensions/           KeyboardShortcuts names, KeyCode constants
 ScreenshotTests/          Swift Testing
@@ -45,6 +46,7 @@ ScreenshotTests/          Swift Testing
 - **CollageArrangement** keeps each screenshot at its own pixel size and where the user dropped it (top-left origin). They start side by side; the dragged one comes to the front, and an edge within 8 screen points of another piece's edge snaps onto it. The collage is the union of all frames; `CollageRenderer` draws them on a clear canvas, so gaps stay transparent. While dragging, the canvas keeps the scale it had when the drag began.
 - **ScreenCoordinates** is the only place that converts between AppKit (bottom-left origin, global), ScreenCaptureKit / Accessibility / `CGImage.cropping` (top-left origin) and overlay coordinates. Do not invert Y anywhere else.
 - **MarkupRenderer** flattens image + blur regions + PaperKit markup (+ optional window alpha mask) at the source's pixel density.
+- **TextRecognizer** reads the screenshot itself (not the markup, so blurred text is read too) with Vision's `RecognizeTextRequest` (accurate, language detected automatically). Vision shrinks what it reads, so an image taller than it is wide (at least 1000 px) is read in square strips that overlap by 200 px; a line belongs to the strip whose own rows hold its centre, so a line cut by one strip's edge is read whole by the next and never twice. Lines are joined in Vision's order, strip after strip.
 - Managers are `@MainActor` singletons (`.shared`) because they own process-wide windows and event monitors that outlive any SwiftUI view.
 
 ### Scrolling Capture
@@ -117,7 +119,7 @@ These come first; every other convention serves them.
 
 ### Testing
 
-- Test only core logic: stitching, the scrolling canvas and composer, coordinate/compositor orientation, markup document and layout math, collage arrangement.
+- Test only core logic: stitching, the scrolling canvas and composer, coordinate/compositor orientation, markup document and layout math, collage arrangement, text recognition strips.
 - No tests for SwiftUI views, Apple frameworks, edge cases or input variations. One table-driven test beats many near-duplicates.
 - Swift Testing only (`@Test`, `#expect`, `@testable import Screenshot`). Synthetic pictures are generated in code (`Pattern` in `ScrollCaptureTests`) so results are exact and repeatable.
 
@@ -136,13 +138,14 @@ These come first; every other convention serves them.
 | Window/region capture, multi-display compositing | ✅ |
 | In-place PaperKit markup, Blur regions, Copy/Save/Share/Finish | ✅ |
 | Preview thumbnail, standalone markup window, Open at Login | ✅ |
+| Extract Text (Vision OCR) in both markup editors | ✅ Code complete, strip math unit tested; **needs trying on real chats and long captures** |
 | Collage of normal screenshots from the preview | ✅ Code complete, arrangement unit tested; **needs trying in the app** |
 | Scrolling capture, manual, several areas, vertical + horizontal | ✅ Code complete, unit tested on synthetic frames; **needs trying on real apps** |
 | Scrolling capture, automatic (Accessibility) | 🚧 First version; requires App Sandbox off; lazy-loading behaviour not solved |
 
 ## Markup Toolbar
 
-- Every control is a native SwiftUI control: `MarkupToolControls` (Select / Draw / Blur picker, pen and width menu, `ColorPicker`, Shapes menu, Text) and `MarkupExportControls` (Copy, Save, Share). Their bodies have no container, so the window's `.toolbar` shows each as its own item; the capture overlay puts the same controls in a Liquid Glass capsule.
+- Every control is a native SwiftUI control: `MarkupToolControls` (Select / Draw / Blur picker, pen and width menu, `ColorPicker`, Shapes menu, Text), `ExtractTextButton` and `MarkupExportControls` (Copy, Save, Share). Their bodies have no container, so the window's `.toolbar` shows each as its own item; the capture overlay puts the same controls in a Liquid Glass capsule.
 - PaperKit's own `MarkupToolbarViewController` is never shown. `MarkupEditorBridge` sets `drawingTool` / `indirectPointerTouchMode` on the markup controller directly and passes a hidden toolbar instance as the sender of PaperKit's insert-shape / text calls.
 
 ## Known Issues
@@ -163,4 +166,5 @@ These come first; every other convention serves them.
 - Blur regions are not part of PaperKit's undo history.
 - Collage pieces cannot be resized, and screenshots from displays with different pixel densities appear at different sizes.
 - The preview panel floats above the collage window and can cover its bottom right corner.
+- Extract Text gives no feedback beyond the clipboard: a beep when no text was found or Vision failed. Side-by-side areas of a scrolling capture (sidebar and document) are read strip by strip, so their lines interleave every strip. Very wide horizontal captures are read in one piece and small text may be missed. Mixed Chinese and English relies on Vision's automatic language detection.
 - The `ScreenshotUITests` target still exists in the project but has no sources.

@@ -72,6 +72,7 @@ struct CaptureView: View {
                     MarkupToolControls(bridge: markupBridge)
                     Divider()
                         .frame(height: 20)
+                    ExtractTextButton(image: state.sourceImage)
                     MarkupExportControls(
                         copy: { export(.copy, document: document) },
                         save: { export(.save, document: document) },
