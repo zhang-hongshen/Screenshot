@@ -350,6 +350,9 @@ final class ScrollCaptureManager {
                 }
                 automaticResult = image
                 showPreview(image, visibleRect: nil)
+                #if DEBUG
+                frameRecorder?.saveAutomaticResult(image)
+                #endif
             } catch is CancellationError {
                 return
             } catch {

@@ -27,8 +27,17 @@ final class ScrollCaptureFrameRecorder {
     func save(_ frame: CGImage) {
         frameCount += 1
         // Numbered here, on the main actor, so the files keep the capture order however the writes finish.
-        let url = folder.appending(path: String(format: "frame-%04d.png", frameCount))
-        Task { await Self.write(frame, to: url) }
+        save(frame, named: String(format: "frame-%04d.png", frameCount))
+    }
+
+    /// Saves what Auto made, so it can be looked at outside the app.
+    func saveAutomaticResult(_ image: CGImage) {
+        save(image, named: "auto-result.png")
+    }
+
+    private func save(_ image: CGImage, named name: String) {
+        let url = folder.appending(path: name)
+        Task { await Self.write(image, to: url) }
     }
 
     /// Encoding a Retina frame as PNG takes tens of milliseconds, so it runs off the main thread.

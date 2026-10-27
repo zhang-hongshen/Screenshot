@@ -4,6 +4,10 @@ import ScreenCaptureKit
 ///
 /// Areas that scroll both ways are walked like a snake: top to bottom, one step right,
 /// bottom to top, one step right, and so on, so every pair of neighbouring frames overlaps.
+///
+/// Areas moved by the scroll wheel cannot tell where they are, so they never jump to the start:
+/// the walk begins where the area is, goes down to the end, then snakes up from there, and stops at
+/// the first step that moved less than asked.
 struct ScrollAreaCapture {
     let area: ScrollArea
     let window: SCWindow
@@ -30,14 +34,25 @@ struct ScrollAreaCapture {
         let startVertical = area.position(along: .vertical)
         let startHorizontal = area.position(along: .horizontal)
         defer {
-            if let startVertical { area.setPosition(startVertical, along: .vertical) }
-            if let startHorizontal { area.setPosition(startHorizontal, along: .horizontal) }
+            if area.canSetPosition {
+                if let startVertical { area.setPosition(startVertical, along: .vertical) }
+                if let startHorizontal { area.setPosition(startHorizontal, along: .horizontal) }
+            } else {
+                scrollBackToStart()
+            }
         }
 
-        await scrollToStart()
-        guard stitcher.append(try await stableFrame()) == .appended else { return nil }
+        if area.canSetPosition {
+            await scrollToStart()
+        }
+        guard let firstFrame = try await stableWindowImage().cropping(to: cropRect),
+              stitcher.append(firstFrame) == .appended else { return nil }
 
         var movesDown = true
+        if !area.canSetPosition {
+            while try await step(along: .vertical, forward: true) {}
+            movesDown = false
+        }
         while !reachedSizeLimit {
             while try await step(along: .vertical, forward: movesDown) {}
             guard try await step(along: .horizontal, forward: true) else { break }
@@ -49,16 +64,16 @@ struct ScrollAreaCapture {
     // MARK: - Moving
 
     private func scrollToStart() async {
-        if area.usesScrollBars {
-            area.setPosition(0, along: .vertical)
-            area.setPosition(0, along: .horizontal)
-        } else {
-            for _ in 0..<3 {
-                area.scrollWheel(by: -100_000, along: .vertical, in: window)
-                area.scrollWheel(by: -100_000, along: .horizontal, in: window)
-            }
-        }
+        area.setPosition(0, along: .vertical)
+        area.setPosition(0, along: .horizontal)
         try? await Task.sleep(for: .milliseconds(200))
+    }
+
+    /// The stitcher knows how far the content moved since the first frame, so the wheel can undo it.
+    private func scrollBackToStart() {
+        let origin = stitcher.origin
+        if origin.y != 0 { area.scrollWheel(by: -origin.y / pixelsPerPoint, along: .vertical, in: window) }
+        if origin.x != 0 { area.scrollWheel(by: -origin.x / pixelsPerPoint, along: .horizontal, in: window) }
     }
 
     /// Moves about half a screen along `axis` and stitches the new frame.
@@ -73,10 +88,13 @@ struct ScrollAreaCapture {
             guard move(along: axis, pixels: forward ? pixels : -pixels) else { return false }
             try await Task.sleep(for: .milliseconds(120))
 
-            switch stitcher.append(try await stableFrame()) {
+            let windowImage = try await stableWindowImage()
+            guard let frame = windowImage.cropping(to: cropRect) else { throw ScrollAreaCaptureError.windowChanged }
+
+            switch stitcher.append(frame) {
             case .appended:
                 learnStepSize(along: axis, from: before)
-                return true
+                return area.canSetPosition || !movedLessThan(pixels, along: axis)
             case .unchanged:
                 return false
             case .limitReached:
@@ -96,7 +114,7 @@ struct ScrollAreaCapture {
 
     /// Returns false when the area is already at the end in that direction.
     private func move(along axis: ScrollAxis, pixels: Double) -> Bool {
-        guard area.usesScrollBars else {
+        guard area.canSetPosition else {
             area.scrollWheel(by: pixels / pixelsPerPoint, along: axis, in: window)
             return true
         }
@@ -111,6 +129,13 @@ struct ScrollAreaCapture {
         return true
     }
 
+    /// A wheel step moves exactly as far as asked unless it reached the end.
+    private func movedLessThan(_ pixels: Double, along axis: ScrollAxis) -> Bool {
+        guard let offset = stitcher.lastOffset else { return true }
+        let moved = abs(axis == .vertical ? offset.y : offset.x)
+        return Double(moved) < pixels - 2 * pixelsPerPoint
+    }
+
     private mutating func learnStepSize(along axis: ScrollAxis, from before: Double?) {
         guard let before,
               let after = area.position(along: axis),
@@ -123,25 +148,22 @@ struct ScrollAreaCapture {
     // MARK: - Capturing
 
     /// Captures until two frames in a row look the same, so smooth scrolling has settled.
-    private func stableFrame() async throws -> CGImage {
-        var previous = try await frame()
+    private func stableWindowImage() async throws -> CGImage {
+        var previous = try await ScreenCaptureService.captureWindow(window)
         for _ in 0..<8 {
             try await Task.sleep(for: .milliseconds(80))
-            let current = try await frame()
-            if FrameComparison.isStable(previous, current) {
+            let current = try await ScreenCaptureService.captureWindow(window)
+            guard current.width == previous.width, current.height == previous.height else {
+                throw ScrollAreaCaptureError.windowChanged
+            }
+            if let previousFrame = previous.cropping(to: cropRect),
+               let currentFrame = current.cropping(to: cropRect),
+               FrameComparison.isStable(previousFrame, currentFrame) {
                 return current
             }
             previous = current
         }
         return previous
-    }
-
-    private func frame() async throws -> CGImage {
-        let image = try await ScreenCaptureService.captureWindow(window)
-        guard let cropped = image.cropping(to: cropRect) else {
-            throw ScrollAreaCaptureError.windowChanged
-        }
-        return cropped
     }
 }
 

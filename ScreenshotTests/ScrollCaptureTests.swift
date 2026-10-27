@@ -29,7 +29,7 @@ struct ScrollCaptureTests {
     }
 
     /// Content scrolled up slides in under a translucent toolbar (Liquid Glass). The toolbar is kept
-    /// once, from the first frame, instead of being repeated over every newly revealed strip.
+    /// once, from the topmost frame, instead of being repeated over every newly revealed strip.
     @Test func stitcherKeepsTranslucentToolbarOnce() throws {
         let document = Pattern(width: 400, height: 2000)
         let label = Pattern(width: 60, height: 20)
@@ -49,8 +49,54 @@ struct ScrollCaptureTests {
 
         let result = Pattern(stitcher.makeImage()!)
         try #require(result.height == barHeight + 920)
-        #expect(result.crop(x: 0, y: 0, width: 400, height: barHeight) == frame(offset: 1000).crop(x: 0, y: 0, width: 400, height: barHeight))
+        #expect(result.crop(x: 0, y: 0, width: 400, height: barHeight) == frame(offset: 640).crop(x: 0, y: 0, width: 400, height: barHeight))
         #expect(result.crop(x: 0, y: barHeight, width: 400, height: 920) == document.crop(x: 0, y: 680, width: 400, height: 920))
+    }
+
+    /// Content scrolled down passes behind a translucent bar under it (the fade above a chat's
+    /// input field). The bar shows what was behind it at the end, not the first screen's last lines.
+    @Test func stitcherTakesBottomBarFromLastFrame() throws {
+        let document = Pattern(width: 400, height: 2000)
+        let barHeight = 40
+
+        func frame(offset: Int) -> Pattern {
+            var frame = document.crop(x: 0, y: offset, width: 400, height: 600)
+            frame.paste(frame.crop(x: 0, y: 600 - barHeight, width: 400, height: barHeight).frosted(), x: 0, y: 600 - barHeight)
+            return frame
+        }
+
+        var stitcher = ScrollCaptureStitcher()
+        for offset in [0, 120, 240, 360] {
+            #expect(stitcher.append(frame(offset: offset).image) == .appended)
+        }
+
+        let result = Pattern(stitcher.makeImage()!)
+        try #require(result.height == 960)
+        #expect(result.crop(x: 0, y: 0, width: 400, height: 920) == document.crop(x: 0, y: 0, width: 400, height: 920))
+        #expect(result.crop(x: 0, y: 920, width: 400, height: barHeight) == frame(offset: 360).crop(x: 0, y: 560, width: 400, height: barHeight))
+    }
+
+    /// A "scroll to bottom" button floats over the content near the bottom. It is shown once, where
+    /// the capture ended, instead of being repeated over every newly revealed strip.
+    @Test func stitcherKeepsFloatingButtonOnce() {
+        let document = Pattern(width: 400, height: 2000)
+        let button = Pattern(width: 40, height: 30, gray: 200)
+        let offsets = [0, 120, 240, 360, 480]
+
+        func frame(offset: Int) -> Pattern {
+            var frame = document.crop(x: 0, y: offset, width: 400, height: 600)
+            frame.paste(button, x: 180, y: 520)
+            return frame
+        }
+
+        var stitcher = ScrollCaptureStitcher()
+        for offset in offsets {
+            #expect(stitcher.append(frame(offset: offset).image) == .appended)
+        }
+
+        var expected = document.crop(x: 0, y: 0, width: 400, height: 1080)
+        expected.paste(button, x: 180, y: 1000)
+        #expect(Pattern(stitcher.makeImage()!) == expected)
     }
 
     /// A sidebar and a document scrolled one after the other end up side by side at full length,
@@ -87,6 +133,16 @@ struct ScrollCaptureTests {
         #expect(result.crop(x: 204, y: 50, width: 596, height: 2600) == document)
         #expect(result.crop(x: 0, y: 50, width: 200, height: 1300) == sidebar)
         #expect(result.crop(x: 0, y: result.height - 30, width: 800, height: 30) == statusBar)
+    }
+
+    /// A sidebar longer than the chat beside it grows the window where the chat grows, so the
+    /// input field under the chat keeps its size instead of being stretched.
+    @Test func composerGrowsLongerSidebarWhereDocumentGrows() {
+        let insertions = ExpandedWindowComposer.insertions(
+            for: [(start: 50, end: 400, needed: 2000), (start: 50, end: 470, needed: 2500)],
+            isPlain: { _ in true }
+        )
+        #expect(insertions == [ExpandedWindowComposer.Insertion(position: 400, length: 2500)])
     }
 
     /// A sparse view (two columns of icons on a white page, like Finder) is one area, not one per

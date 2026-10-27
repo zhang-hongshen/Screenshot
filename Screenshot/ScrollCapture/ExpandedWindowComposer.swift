@@ -138,12 +138,17 @@ nonisolated enum ExpandedWindowComposer {
     ) -> [Insertion] {
         var result: [Insertion] = []
         for span in spans.sorted(by: { $0.end < $1.end }) where span.needed > 0 {
-            let alreadyAdded = result
-                .filter { $0.position > span.start && $0.position <= span.end }
-                .reduce(0) { $0 + $1.length }
-            if span.needed > alreadyAdded {
+            let inSpan = result.indices.filter { result[$0].position > span.start && result[$0].position <= span.end }
+            let alreadyAdded = inSpan.reduce(0) { $0 + result[$1].length }
+            guard span.needed > alreadyAdded else { continue }
+            // A longer sidebar beside a document grows the window where the document already grows,
+            // like a real window whose scroll views get taller. The last plain line in the sidebar's
+            // span may lie in a bar under the document (a chat's input field), which must keep its size.
+            if let index = inSpan.last {
+                result[index] = Insertion(position: result[index].position, length: result[index].length + span.needed - alreadyAdded)
+            } else {
                 let position = stride(from: span.end, to: span.start + 1, by: -1).first(where: isPlain) ?? span.end
-                result.append(Insertion(position: position, length: span.needed - alreadyAdded))
+                result.append(Insertion(position: position, length: span.needed))
             }
         }
         return result

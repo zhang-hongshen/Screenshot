@@ -10,6 +10,10 @@ extension AXUIElement {
         value(of: kAXChildrenAttribute) as? [AXUIElement] ?? []
     }
 
+    var parent: AXUIElement? {
+        element(of: kAXParentAttribute)
+    }
+
     var windows: [AXUIElement] {
         value(of: kAXWindowsAttribute) as? [AXUIElement] ?? []
     }

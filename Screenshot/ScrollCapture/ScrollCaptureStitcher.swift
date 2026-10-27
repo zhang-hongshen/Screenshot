@@ -7,7 +7,8 @@ import CoreGraphics
 /// (a few gray values per pixel row and per pixel column), and the move is found by sliding the new
 /// profile along the previous one: first roughly, then to the exact pixel. Only the newly revealed
 /// strip of each frame is kept. Edges that never move (sticky headers, toolbars inside the area)
-/// are found from the first move and kept once.
+/// are found from the first move and kept once. Small things floating over the content (a "scroll
+/// to bottom" button) are kept once too: content is taken only after it has moved out from under them.
 nonisolated struct ScrollCaptureStitcher {
     enum AppendResult: Equatable {
         case appended
@@ -65,12 +66,18 @@ nonisolated struct ScrollCaptureStitcher {
     private var firstFrame: CGImage?
     private var previousProfiles: Profiles?
     private var pieces: [Piece] = []
-    /// Content position of the latest frame's top-left pixel.
-    private var origin = CGPoint.zero
+    /// Content position of the latest frame's top-left pixel; the first frame sits at zero.
+    private(set) var origin = CGPoint.zero
     /// Rows and columns at the edges that do not scroll, found from the first move along each axis.
     private var fixedEdges = Edges()
     private var hasVerticalEdges = false
     private var hasHorizontalEdges = false
+    /// Lines covered by something floating over the content, in frame pixels along each axis.
+    private var floatingRows: Range<Int>?
+    private var floatingColumns: Range<Int>?
+    /// The part of the latest frame left out because of floating things, replaced on every move,
+    /// so they show once, where the capture ended.
+    private var latestCoveredPieces: [Piece] = []
 
     private struct Edges {
         var top: CGFloat = 0
@@ -78,6 +85,24 @@ nonisolated struct ScrollCaptureStitcher {
         var left: CGFloat = 0
         var right: CGFloat = 0
     }
+
+    private enum Edge {
+        case top
+        case bottom
+        case left
+        case right
+    }
+
+    /// A fixed edge copied from the frame that reached furthest towards it.
+    private struct EdgeStrip {
+        let image: CGImage
+        /// How far that frame sat towards the edge, in content pixels; the first frame sits at 0.
+        let reach: CGFloat
+    }
+
+    /// A translucent bar shows the content behind it, so the bar under the content comes from the
+    /// frame furthest down, not from the first one. Edges without a strip come from the first frame.
+    private var edgeStrips: [Edge: EdgeStrip] = [:]
 
     private let maximumOutputDimension: CGFloat = 32_768
     private static let binCount = 64
@@ -91,6 +116,10 @@ nonisolated struct ScrollCaptureStitcher {
     private static let maximumParallaxDifference: Float = 8
     /// Largest mean gray difference of a single line that still moved exactly with the content.
     private static let movedLineDifference: Float = 1
+    /// Smallest gray difference that a floating thing makes against the content moving under it.
+    private static let floatingDifference: Float = 2
+    /// Fewer lines in a row than this that look floating are noise.
+    private static let minimumFloatingRun = 4
 
     // MARK: - Appending
 
@@ -149,12 +178,14 @@ nonisolated struct ScrollCaptureStitcher {
             previous: previousProfiles,
             current: profiles
         )
+        updated.learnFloatingLines(along: move.axis, offset: move.offset, previous: previousProfiles, current: profiles)
         let previousOrigin = origin
         switch move.axis {
         case .vertical: updated.origin.y += CGFloat(move.offset)
         case .horizontal: updated.origin.x += CGFloat(move.offset)
         }
         updated.addPieces(of: image, previousOrigin: previousOrigin)
+        updated.keepEdgeStrips(of: image)
         let size = updated.outputSize
         guard size.width <= maximumOutputDimension, size.height <= maximumOutputDimension else {
             return .limitReached
@@ -238,6 +269,68 @@ nonisolated struct ScrollCaptureStitcher {
         return start..<end
     }
 
+    /// A floating thing may appear only after scrolling began (or fade in), so it is looked for on
+    /// every move, and the lines it ever covered are remembered.
+    private mutating func learnFloatingLines(along axis: Axis, offset: Int, previous: Profiles, current: Profiles) {
+        let band = scrollingRange(along: axis, size: current.exact(along: axis).lineCount)
+        guard let found = Self.floatingLines(previous.exact(along: axis), current.exact(along: axis), band: band, shift: offset) else {
+            return
+        }
+        let known = axis == .vertical ? floatingRows : floatingColumns
+        let lines = known.map { min($0.lowerBound, found.lowerBound)..<max($0.upperBound, found.upperBound) } ?? found
+        // Floating buttons are small and sit near an edge. Anything bigger is content changing on its own.
+        guard lines.count <= band.count / 4, Self.lines(band, awayFrom: lines).count >= band.count / 2 else { return }
+        switch axis {
+        case .vertical: floatingRows = lines
+        case .horizontal: floatingColumns = lines
+        }
+    }
+
+    /// Lines where something stays put while the content moves under it: some of their values
+    /// match the previous frame in place, but not after the move.
+    private static func floatingLines(_ previous: Profile, _ current: Profile, band: Range<Int>, shift: Int) -> Range<Int>? {
+        func isFloating(_ line: Int) -> Bool {
+            let now = current.lines(line..<(line + 1))
+            let before = previous.lines(line..<(line + 1))
+            // What the line shows now against what it showed before the move, or, near the edge
+            // where content enters, what it showed before against where that content went.
+            let moved: [Float]
+            if (0..<previous.lineCount).contains(line + shift) {
+                moved = vDSP.absolute(vDSP.subtract(now, previous.lines((line + shift)..<(line + shift + 1))))
+            } else if (0..<current.lineCount).contains(line - shift) {
+                moved = vDSP.absolute(vDSP.subtract(before, current.lines((line - shift)..<(line - shift + 1))))
+            } else {
+                return false
+            }
+            let still = vDSP.absolute(vDSP.subtract(now, before))
+            return zip(still, moved).contains { still, moved in moved >= floatingDifference && still * 4 <= moved }
+        }
+
+        var found: Range<Int>?
+        var runStart: Int?
+        // One line past the band closes the last run.
+        for line in band.lowerBound...band.upperBound {
+            if line < band.upperBound, isFloating(line) {
+                runStart = runStart ?? line
+                continue
+            }
+            if let start = runStart, line - start >= minimumFloatingRun {
+                found = (found?.lowerBound ?? start)..<line
+            }
+            runStart = nil
+        }
+        return found
+    }
+
+    /// The part of `span` on the far side of `floating`: the floating lines and the stretch
+    /// between them and the nearer end are left out.
+    private static func lines(_ span: Range<Int>, awayFrom floating: Range<Int>?) -> Range<Int> {
+        guard let floating else { return span }
+        let before = span.lowerBound..<min(max(span.lowerBound, floating.lowerBound), span.upperBound)
+        let after = max(min(span.upperBound, floating.upperBound), span.lowerBound)..<span.upperBound
+        return before.count >= after.count ? before : after
+    }
+
     /// Mean gray difference between one line of each profile, or nil when a line is outside its profile.
     private static func lineDifference(_ first: Profile, _ firstLine: Int, _ second: Profile, _ secondLine: Int) -> Float? {
         guard (0..<first.lineCount).contains(firstLine), (0..<second.lineCount).contains(secondLine) else { return nil }
@@ -248,15 +341,38 @@ nonisolated struct ScrollCaptureStitcher {
 
     /// Keeps the parts of the frame's scrolling area that the previous frame did not show.
     private mutating func addPieces(of image: CGImage, previousOrigin: CGPoint) {
-        let scrolling = scrollingRect(of: image)
-        let current = scrolling.offsetBy(dx: origin.x, dy: origin.y)
-        let previous = scrolling.offsetBy(dx: previousOrigin.x, dy: previousOrigin.y)
-        for rect in Self.subtract(previous, from: current) {
-            let local = rect.offsetBy(dx: -origin.x, dy: -origin.y)
-            if let copy = Self.copy(of: image, cropping: local) {
-                pieces.append(Piece(image: copy, rect: rect, frameOrigin: origin))
+        let uncovered = uncoveredRect(of: image)
+        let current = uncovered.offsetBy(dx: origin.x, dy: origin.y)
+        let previous = uncovered.offsetBy(dx: previousOrigin.x, dy: previousOrigin.y)
+        pieces += Self.subtract(previous, from: current).compactMap { piece(of: image, at: $0) }
+        latestCoveredPieces = Self.subtract(uncovered, from: scrollingRect(of: image)).compactMap { local in
+            piece(of: image, at: local.offsetBy(dx: origin.x, dy: origin.y))
+        }
+    }
+
+    /// Keeps the frame's fixed edges that sit further towards their side than any frame before.
+    private mutating func keepEdgeStrips(of image: CGImage) {
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
+        let middleHeight = height - fixedEdges.top - fixedEdges.bottom
+        let strips: [(edge: Edge, rect: CGRect, reach: CGFloat)] = [
+            (.top, CGRect(x: 0, y: 0, width: width, height: fixedEdges.top), -origin.y),
+            (.bottom, CGRect(x: 0, y: height - fixedEdges.bottom, width: width, height: fixedEdges.bottom), origin.y),
+            (.left, CGRect(x: 0, y: fixedEdges.top, width: fixedEdges.left, height: middleHeight), -origin.x),
+            (.right, CGRect(x: width - fixedEdges.right, y: fixedEdges.top, width: fixedEdges.right, height: middleHeight), origin.x),
+        ]
+        for strip in strips where !strip.rect.isEmpty && strip.reach > edgeStrips[strip.edge]?.reach ?? 0 {
+            if let copy = Self.copy(of: image, cropping: strip.rect) {
+                edgeStrips[strip.edge] = EdgeStrip(image: copy, reach: strip.reach)
             }
         }
+    }
+
+    /// A copy of the latest frame's pixels at `rect`, given in content coordinates.
+    private func piece(of image: CGImage, at rect: CGRect) -> Piece? {
+        let local = rect.offsetBy(dx: -origin.x, dy: -origin.y)
+        guard let copy = Self.copy(of: image, cropping: local) else { return nil }
+        return Piece(image: copy, rect: rect, frameOrigin: origin)
     }
 
     // MARK: - Result
@@ -299,7 +415,8 @@ nonisolated struct ScrollCaptureStitcher {
 
         let scrolling = scrollingRect(of: firstFrame)
         Self.draw(firstFrame, cropping: scrolling, at: outputPoint(of: scrolling.origin), context: context, canvasHeight: size.height)
-        for piece in pieces {
+        // Content that was clear of floating things wins over the latest frame's covered part.
+        for piece in latestCoveredPieces + pieces {
             let visible = piece.rect.intersection(scrolling.offsetBy(dx: piece.frameOrigin.x, dy: piece.frameOrigin.y))
             guard !visible.isEmpty else { continue }
             let local = visible.offsetBy(dx: -piece.rect.minX, dy: -piece.rect.minY)
@@ -308,16 +425,23 @@ nonisolated struct ScrollCaptureStitcher {
 
         // Fixed edges come last, so they stay on top like in the real window.
         let middleHeight = frameHeight - edges.top - edges.bottom
-        let fixedParts: [(source: CGRect, destination: CGPoint)] = [
-            (CGRect(x: 0, y: 0, width: frameWidth, height: edges.top), .zero),
-            (CGRect(x: 0, y: frameHeight - edges.bottom, width: frameWidth, height: edges.bottom),
+        let fixedParts: [(edge: Edge, source: CGRect, destination: CGPoint)] = [
+            (.top, CGRect(x: 0, y: 0, width: frameWidth, height: edges.top), .zero),
+            (.bottom, CGRect(x: 0, y: frameHeight - edges.bottom, width: frameWidth, height: edges.bottom),
              CGPoint(x: 0, y: edges.top + content.height)),
-            (CGRect(x: 0, y: edges.top, width: edges.left, height: middleHeight), CGPoint(x: 0, y: edges.top)),
-            (CGRect(x: frameWidth - edges.right, y: edges.top, width: edges.right, height: middleHeight),
+            (.left, CGRect(x: 0, y: edges.top, width: edges.left, height: middleHeight), CGPoint(x: 0, y: edges.top)),
+            (.right, CGRect(x: frameWidth - edges.right, y: edges.top, width: edges.right, height: middleHeight),
              CGPoint(x: edges.left + content.width, y: edges.top)),
         ]
         for part in fixedParts where !part.source.isEmpty {
-            Self.draw(firstFrame, cropping: part.source, at: part.destination, context: context, canvasHeight: size.height)
+            // A side strip kept before the top and bottom edges were known has the wrong height.
+            if let strip = edgeStrips[part.edge],
+               CGFloat(strip.image.width) == part.source.width, CGFloat(strip.image.height) == part.source.height {
+                let whole = CGRect(x: 0, y: 0, width: strip.image.width, height: strip.image.height)
+                Self.draw(strip.image, cropping: whole, at: part.destination, context: context, canvasHeight: size.height)
+            } else {
+                Self.draw(firstFrame, cropping: part.source, at: part.destination, context: context, canvasHeight: size.height)
+            }
         }
         return context.makeImage()
     }
@@ -336,7 +460,7 @@ nonisolated struct ScrollCaptureStitcher {
         guard let firstFrame else { return .zero }
         let scrolling = scrollingRect(of: firstFrame)
         var bounds = scrolling
-        for piece in pieces {
+        for piece in latestCoveredPieces + pieces {
             let visible = piece.rect.intersection(scrolling.offsetBy(dx: piece.frameOrigin.x, dy: piece.frameOrigin.y))
             if !visible.isEmpty {
                 bounds = bounds.union(visible)
@@ -352,6 +476,13 @@ nonisolated struct ScrollCaptureStitcher {
             width: CGFloat(image.width) - fixedEdges.left - fixedEdges.right,
             height: CGFloat(image.height) - fixedEdges.top - fixedEdges.bottom
         )
+    }
+
+    /// The scrolling part of a frame without the lines under floating things.
+    private func uncoveredRect(of image: CGImage) -> CGRect {
+        let rows = Self.lines(scrollingRange(along: .vertical, size: image.height), awayFrom: floatingRows)
+        let columns = Self.lines(scrollingRange(along: .horizontal, size: image.width), awayFrom: floatingColumns)
+        return CGRect(x: columns.lowerBound, y: rows.lowerBound, width: columns.count, height: rows.count)
     }
 
     private func scrollingRange(along axis: Axis, size: Int) -> Range<Int> {
