@@ -147,6 +147,35 @@ struct ScrollCaptureTests {
 
     /// A sparse view (two columns of icons on a white page, like Finder) is one area, not one per
     /// column of icons, and the sidebar beside it is not stretched.
+    /// Frames as Chrome reports them for a log box at (0, 100, 600, 200) and a table at the same place.
+    @Test(arguments: [
+        (children: [CGRect(x: 2, y: 102, width: 580, height: 16), CGRect(x: 2, y: 299, width: 580, height: 1)], scrolls: true),
+        (children: [CGRect(x: 0, y: 100, width: 2000, height: 1500)], scrolls: true),
+        (children: [CGRect(x: 2, y: 102, width: 580, height: 16), CGRect(x: 2, y: 120, width: 580, height: 16)], scrolls: false),
+    ])
+    func webBoxIsFoundFromClippedChildren(children: [CGRect], scrolls: Bool) {
+        let box = CGRect(x: 0, y: 100, width: 600, height: 200)
+        #expect(ScrollArea.clipsContent(frame: box, childFrames: children) == scrolls)
+    }
+
+    /// Lines of a log box at (0, 100, 600, 200): one squeezed above, two on screen, two squeezed below.
+    @Test(arguments: [
+        (axis: ScrollAxis.vertical, forward: true, target: 3 as Int?),
+        (axis: ScrollAxis.vertical, forward: false, target: 0 as Int?),
+        (axis: ScrollAxis.horizontal, forward: true, target: nil as Int?),
+    ])
+    func revealShowsTheNextHiddenItem(axis: ScrollAxis, forward: Bool, target: Int?) {
+        let items = [
+            CGRect(x: 2, y: 100, width: 580, height: 1),
+            CGRect(x: 2, y: 120, width: 580, height: 16),
+            CGRect(x: 2, y: 140, width: 580, height: 16),
+            CGRect(x: 2, y: 299, width: 580, height: 1),
+            CGRect(x: 2, y: 299, width: 580, height: 1),
+        ]
+        let box = CGRect(x: 0, y: 100, width: 600, height: 200)
+        #expect(ScrollArea.revealTarget(itemFrames: items, visible: box, axis: axis, forward: forward) == target)
+    }
+
     @Test func canvasTreatsSparseViewAsOneArea() {
         let toolbar = Pattern(width: 800, height: 50)
         let sidebar = Pattern(width: 200, height: 420)

@@ -40,6 +40,10 @@ extension AXUIElement {
         (value(of: attribute) as? NSNumber)?.doubleValue
     }
 
+    func performAction(_ action: String) {
+        AXUIElementPerformAction(self, action as CFString)
+    }
+
     @discardableResult
     func setNumber(_ number: Double, for attribute: String) -> Bool {
         AXUIElementSetAttributeValue(self, attribute as CFString, NSNumber(value: number)) == .success

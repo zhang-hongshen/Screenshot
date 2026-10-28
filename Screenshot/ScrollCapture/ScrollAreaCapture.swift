@@ -4,10 +4,6 @@ import ScreenCaptureKit
 ///
 /// Areas that scroll both ways are walked like a snake: top to bottom, one step right,
 /// bottom to top, one step right, and so on, so every pair of neighbouring frames overlaps.
-///
-/// Areas moved by the scroll wheel cannot tell where they are, so they never jump to the start:
-/// the walk begins where the area is, goes down to the end, then snakes up from there, and stops at
-/// the first step that moved less than asked.
 struct ScrollAreaCapture {
     let area: ScrollArea
     let window: SCWindow
@@ -28,31 +24,28 @@ struct ScrollAreaCapture {
             .intersection(CGRect(origin: .zero, size: windowImageSize))
     }
 
+    /// Where the first frame sits in the image `run()` returns.
+    var firstFrameRect: CGRect? {
+        stitcher.firstFrameRect
+    }
+
     /// Returns the full content of the area, or nil when it could not be captured.
     mutating func run() async throws -> CGImage? {
-        guard !cropRect.isEmpty else { return nil }
+        guard !cropRect.isEmpty, area.canSetPosition || area.revealsItems else { return nil }
         let startVertical = area.position(along: .vertical)
         let startHorizontal = area.position(along: .horizontal)
+        let startItem = area.firstVisibleItem()
         defer {
-            if area.canSetPosition {
-                if let startVertical { area.setPosition(startVertical, along: .vertical) }
-                if let startHorizontal { area.setPosition(startHorizontal, along: .horizontal) }
-            } else {
-                scrollBackToStart()
-            }
+            if let startVertical { area.setPosition(startVertical, along: .vertical) }
+            if let startHorizontal { area.setPosition(startHorizontal, along: .horizontal) }
+            startItem?.performAction("AXScrollToVisible")
         }
 
-        if area.canSetPosition {
-            await scrollToStart()
-        }
+        await scrollToStart()
         guard let firstFrame = try await stableWindowImage().cropping(to: cropRect),
               stitcher.append(firstFrame) == .appended else { return nil }
 
         var movesDown = true
-        if !area.canSetPosition {
-            while try await step(along: .vertical, forward: true) {}
-            movesDown = false
-        }
         while !reachedSizeLimit {
             while try await step(along: .vertical, forward: movesDown) {}
             guard try await step(along: .horizontal, forward: true) else { break }
@@ -64,16 +57,13 @@ struct ScrollAreaCapture {
     // MARK: - Moving
 
     private func scrollToStart() async {
-        area.setPosition(0, along: .vertical)
-        area.setPosition(0, along: .horizontal)
+        if area.canSetPosition {
+            area.setPosition(0, along: .vertical)
+            area.setPosition(0, along: .horizontal)
+        } else {
+            area.revealStart()
+        }
         try? await Task.sleep(for: .milliseconds(200))
-    }
-
-    /// The stitcher knows how far the content moved since the first frame, so the wheel can undo it.
-    private func scrollBackToStart() {
-        let origin = stitcher.origin
-        if origin.y != 0 { area.scrollWheel(by: -origin.y / pixelsPerPoint, along: .vertical, in: window) }
-        if origin.x != 0 { area.scrollWheel(by: -origin.x / pixelsPerPoint, along: .horizontal, in: window) }
     }
 
     /// Moves about half a screen along `axis` and stitches the new frame.
@@ -90,22 +80,19 @@ struct ScrollAreaCapture {
 
             let windowImage = try await stableWindowImage()
             guard let frame = windowImage.cropping(to: cropRect) else { throw ScrollAreaCaptureError.windowChanged }
-
             switch stitcher.append(frame) {
             case .appended:
                 learnStepSize(along: axis, from: before)
-                return area.canSetPosition || !movedLessThan(pixels, along: axis)
+                return true
             case .unchanged:
                 return false
             case .limitReached:
                 reachedSizeLimit = true
                 return false
             case .noOverlap:
-                if let before {
-                    area.setPosition(before, along: axis)
-                } else {
-                    area.scrollWheel(by: forward ? -pixels / pixelsPerPoint : pixels / pixelsPerPoint, along: axis, in: window)
-                }
+                // Only a scroll bar can go back exactly.
+                guard let before else { return false }
+                area.setPosition(before, along: axis)
                 pixels /= 2
             }
         }
@@ -115,8 +102,7 @@ struct ScrollAreaCapture {
     /// Returns false when the area is already at the end in that direction.
     private func move(along axis: ScrollAxis, pixels: Double) -> Bool {
         guard area.canSetPosition else {
-            area.scrollWheel(by: pixels / pixelsPerPoint, along: axis, in: window)
-            return true
+            return area.revealNext(along: axis, forward: pixels > 0)
         }
         guard let position = area.position(along: axis) else { return false }
         if pixels > 0 && position >= 0.999 { return false }
@@ -127,13 +113,6 @@ struct ScrollAreaCapture {
         let units = unitsPerPixel[axis] ?? 1 / (5 * Double(viewportPixels))
         area.setPosition(position + pixels * units, along: axis)
         return true
-    }
-
-    /// A wheel step moves exactly as far as asked unless it reached the end.
-    private func movedLessThan(_ pixels: Double, along axis: ScrollAxis) -> Bool {
-        guard let offset = stitcher.lastOffset else { return true }
-        let moved = abs(axis == .vertical ? offset.y : offset.x)
-        return Double(moved) < pixels - 2 * pixelsPerPoint
     }
 
     private mutating func learnStepSize(along axis: ScrollAxis, from before: Double?) {

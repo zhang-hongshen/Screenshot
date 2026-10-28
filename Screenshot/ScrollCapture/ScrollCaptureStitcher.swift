@@ -66,8 +66,8 @@ nonisolated struct ScrollCaptureStitcher {
     private var firstFrame: CGImage?
     private var previousProfiles: Profiles?
     private var pieces: [Piece] = []
-    /// Content position of the latest frame's top-left pixel; the first frame sits at zero.
-    private(set) var origin = CGPoint.zero
+    /// Content position of the latest frame's top-left pixel.
+    private var origin = CGPoint.zero
     /// Rows and columns at the edges that do not scroll, found from the first move along each axis.
     private var fixedEdges = Edges()
     private var hasVerticalEdges = false
@@ -379,11 +379,20 @@ nonisolated struct ScrollCaptureStitcher {
 
     /// Where the latest frame sits in `makeImage()`, in pixels with a top-left origin.
     var latestFrameRect: CGRect? {
+        frameRect(at: origin)
+    }
+
+    /// Where the first frame sits in `makeImage()`, in pixels with a top-left origin.
+    var firstFrameRect: CGRect? {
+        frameRect(at: .zero)
+    }
+
+    private func frameRect(at frameOrigin: CGPoint) -> CGRect? {
         guard let firstFrame else { return nil }
         let content = contentBounds()
         return CGRect(
-            x: origin.x - content.minX + fixedEdges.left,
-            y: origin.y - content.minY + fixedEdges.top,
+            x: frameOrigin.x - content.minX + fixedEdges.left,
+            y: frameOrigin.y - content.minY + fixedEdges.top,
             width: CGFloat(firstFrame.width),
             height: CGFloat(firstFrame.height)
         )
