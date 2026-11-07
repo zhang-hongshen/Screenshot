@@ -60,3 +60,6 @@ Screenshot/output/
 /.Patches/
 /.Design/
 /.design/
+
+# Repository overview
+!/README.md

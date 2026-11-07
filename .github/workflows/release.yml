@@ -46,8 +46,8 @@ jobs:
         env:
           HAS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 != '' }}
         run: |
-          # Version and name are set in Xcode (target Screenshot → General), not in this file.
-          SETTINGS="$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -showBuildSettings -json)"
+          # The release tag sets the version; the app name comes from the project.
+          SETTINGS="$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -showBuildSettings -json MARKETING_VERSION="$GITHUB_REF_NAME")"
           read_setting() {
             echo "$SETTINGS" | jq -r --arg key "$1" \
               '.[] | select(.target == "Screenshot") | .buildSettings[$key] // empty'
@@ -121,6 +121,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             CODE_SIGN_STYLE=Manual \
             ENABLE_HARDENED_RUNTIME=YES \
+            MARKETING_VERSION="${{ steps.meta.outputs.version }}" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             "${SIGNING[@]}"
 
