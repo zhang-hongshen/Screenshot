@@ -2,7 +2,7 @@ import KeyboardShortcuts
 import SwiftUI
 
 /// Lets the user change the global capture shortcuts.
-struct ShortcutsSettingsView: View {
+struct KeyboardSettingsView: View {
     var body: some View {
         Form {
             KeyboardShortcuts.Recorder("Capture", name: .capture)
@@ -13,5 +13,5 @@ struct ShortcutsSettingsView: View {
 }
 
 #Preview {
-    ShortcutsSettingsView()
+    KeyboardSettingsView()
 }

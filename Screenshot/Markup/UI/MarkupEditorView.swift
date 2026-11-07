@@ -23,7 +23,7 @@ struct MarkupEditorView: View {
             bridge: markupBridge
         )
         .toolbar {
-            ToolbarItemGroup(placement: .principal) {
+            ToolbarItem(placement: .principal) {
                 MarkupToolControls(bridge: markupBridge)
             }
             ToolbarItemGroup(placement: .primaryAction) {

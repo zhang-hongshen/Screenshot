@@ -24,6 +24,7 @@ struct WindowHighlightView: View {
             }
             .position(x: overlayFrame.midX, y: overlayFrame.midY)
         }
+        .allowsHitTesting(false)
     }
 
     private var overlayFrame: CGRect {

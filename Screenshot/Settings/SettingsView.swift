@@ -4,12 +4,12 @@ import SwiftUI
 struct SettingsView: View {
     var body: some View {
         TabView {
-            Tab("Shortcuts", systemImage: "keyboard") {
-                ShortcutsSettingsView()
-                    .padding()
-            }
             Tab("General", systemImage: "gear") {
                 GeneralSettingsView()
+                    .padding()
+            }
+            Tab("Shortcuts", systemImage: "keyboard") {
+                KeyboardSettingsView()
                     .padding()
             }
         }

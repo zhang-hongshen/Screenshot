@@ -23,12 +23,12 @@ struct ScreenshotApp: App {
             Button("Capture") {
                 CaptureManager.shared.start()
             }
-            .keyboardShortcut("1", modifiers: .command)
+            .globalKeyboardShortcut(.capture)
 
             Button("Scrolling Capture") {
                 ScrollCaptureManager.shared.start()
             }
-            .keyboardShortcut("2", modifiers: .command)
+            .globalKeyboardShortcut(.scrollingCapture)
 
             Button("Open Latest Capture") {
                 openWindow(id: "markup-editor")

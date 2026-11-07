@@ -145,7 +145,7 @@ These come first; every other convention serves them.
 
 ## Markup Toolbar
 
-- Every control is a native SwiftUI control: `MarkupToolControls` (Select / Draw / Blur picker, pen and width menu, `ColorPicker`, Shapes menu, Text), `ExtractTextButton` and `MarkupExportControls` (Copy, Save, Share). Their bodies have no container, so the window's `.toolbar` shows each as its own item; the capture overlay puts the same controls in a Liquid Glass capsule.
+- Every control is a native SwiftUI control: `MarkupToolControls` (Select / Draw / Blur picker, pen and width menu, `ColorPicker`, Shapes menu, Text), `ExtractTextButton` and `MarkupExportControls` (Copy, Save, Share). `MarkupToolControls` owns a fixed-size row with explicit spacing, shared by a single window toolbar item and the capture overlay's Liquid Glass capsule. The mode picker's label is hidden and the colour well keeps its intrinsic size.
 - PaperKit's own `MarkupToolbarViewController` is never shown. `MarkupEditorBridge` sets `drawingTool` / `indirectPointerTouchMode` on the markup controller directly and passes a hidden toolbar instance as the sender of PaperKit's insert-shape / text calls.
 
 ## Known Issues
