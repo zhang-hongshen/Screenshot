@@ -1,44 +1,42 @@
+import AppKit
 import CoreGraphics
 import Testing
 @testable import Screenshot
 
 struct MarkupDocumentTests {
     @MainActor
-    @Test func redactionCreationNormalizesDragRect() {
-        let document = MarkupDocument(imageSize: CGSize(width: 400, height: 300))
-
-        document.addRedaction(from: CGPoint(x: 120, y: 90), to: CGPoint(x: 40, y: 20))
-
-        #expect(document.redactions.count == 1)
-        #expect(document.redactions[0].rect == CGRect(x: 40, y: 20, width: 80, height: 70))
+    @Test func brushHistory() throws {
+        let document = MarkupDocument(imageSize: CGSize(width: 40, height: 40))
+        let session = document.imageEdits
+        let context = try #require(CGContext(
+            data: nil, width: 40, height: 40, bitsPerComponent: 8, bytesPerRow: 160,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let pixels = try #require(context.makeImage())
+        let original = NSImage(cgImage: pixels, size: document.imageSize)
+        let first = NSImage(cgImage: pixels, size: original.size)
+        let second = NSImage(cgImage: pixels, size: original.size)
+        session.setSourceIfNeeded(original)
+        #expect(document.snapshot().editedImage == nil)
+        session.apply(first)
+        session.recordStrokeUndo(previous: nil)
+        #expect(document.snapshot().editedImage === first)
+        session.apply(second)
+        session.apply(first)
+        session.apply(second)
+        session.recordStrokeUndo(previous: first, tool: .blur)
+        session.undo()
+        #expect(session.currentImage === first)
+        session.undo()
+        #expect(session.currentImage === original)
+        session.redo()
+        #expect(session.currentImage === first)
+        session.redo()
+        #expect(session.currentImage === second)
+        session.undo()
+        session.apply(first)
+        session.recordStrokeUndo(previous: first)
+        #expect(!session.canRedo)
     }
 
-    @MainActor
-    @Test func selectedRedactionsCanBeDeleted() throws {
-        let document = MarkupDocument(imageSize: CGSize(width: 400, height: 300))
-        document.addRedaction(from: CGPoint(x: 10, y: 20), to: CGPoint(x: 110, y: 120))
-        let id = try #require(document.redactions.first?.id)
-
-        document.selectedRedactionIDs = [id]
-        document.deleteSelectedRedactions()
-
-        #expect(document.redactions.isEmpty)
-        #expect(document.selectedRedactionIDs.isEmpty)
-    }
-
-
-    @MainActor
-    @Test func deleteKeyIsHandledOnlyForSelectedBlurRegions() {
-        let document = MarkupDocument(imageSize: CGSize(width: 400, height: 300))
-
-        #expect(document.handleDeleteKey() == false)
-
-        document.addRedaction(from: CGPoint(x: 10, y: 10), to: CGPoint(x: 80, y: 80))
-        #expect(document.handleDeleteKey() == false)
-        #expect(document.redactions.count == 1)
-
-        document.isRedactionMode = true
-        #expect(document.handleDeleteKey() == true)
-        #expect(document.redactions.isEmpty)
-    }
 }

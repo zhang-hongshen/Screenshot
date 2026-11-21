@@ -76,13 +76,11 @@ struct ScreenCaptureRegionCompositorTests {
         )
         let image = NSImage(cgImage: source, size: CGSize(width: 2, height: 2))
         let snapshot = MarkupSnapshot(
-            markup: PaperMarkup(bounds: CGRect(x: 0, y: 0, width: 2, height: 2)),
-            redactions: []
+            markup: PaperMarkup(bounds: CGRect(x: 0, y: 0, width: 2, height: 2))
         )
 
         let result = try #require(await MarkupRenderer.shared.renderedImage(
             image: image,
-            pixelatedImage: image,
             snapshot: snapshot
         ))
         var rect = CGRect(x: 0, y: 0, width: 2, height: 2)

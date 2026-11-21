@@ -69,6 +69,7 @@ final class ScrollCaptureManager {
             let window = CaptureWindow(screen: screen)
             window.contentView = CaptureHostingView(rootView: CaptureView(
                 screenFrame: screen.frame,
+                screenVisibleFrame: screen.visibleFrame,
                 detector: detector,
                 selection: selection,
                 state: window.overlayState,

@@ -93,10 +93,9 @@ final class MarkupEditorBridge: NSObject {
 
     // MARK: - Applying the tool
 
-    /// Blur regions are Screenshot's own overlay, so PaperKit stops taking input while Blur is chosen.
+    /// Brush gestures belong to Screenshot's overlay rather than PaperKit.
     private func applyTool() {
-        document?.isRedactionMode = tool == .blur
-        markupController.isEditable = tool != .blur
+        markupController.isEditable = tool == .select || tool == .draw
         let drawingTool = ink.tool(color: NSColor(color), width: lineWidth)
         paperKitToolbar.selectedDrawingTool = drawingTool
         switch tool {
@@ -105,7 +104,7 @@ final class MarkupEditorBridge: NSObject {
         case .draw:
             markupController.drawingTool = drawingTool
             markupController.indirectPointerTouchMode = .drawing
-        case .blur:
+        case .blur, .eraseText:
             break
         }
     }

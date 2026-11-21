@@ -1,3 +1,4 @@
+import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
@@ -38,6 +39,8 @@ struct ScreenshotApp: App {
             Divider()
 
             Button("Settings") {
+                // Accessory apps must activate explicitly so the recorder receives keyboard input.
+                NSApp.activate()
                 openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)

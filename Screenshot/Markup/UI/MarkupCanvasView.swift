@@ -3,11 +3,30 @@ import PaperKit
 import SwiftUI
 
 /// The editing canvas: the screenshot, PaperKit markup, and the blur overlay above it.
-///
-/// PaperKit only offers AppKit view controllers, so this wraps them for SwiftUI.
-struct MarkupCanvasView: NSViewControllerRepresentable {
+struct MarkupCanvasView: View {
     let image: NSImage?
-    let pixelatedImage: NSImage?
+    let document: MarkupDocument
+    let bridge: MarkupEditorBridge
+
+    var body: some View {
+        PaperMarkupCanvasView(
+            image: document.imageEdits.currentImage ?? image,
+            document: document,
+            bridge: bridge
+        )
+        .allowsHitTesting(bridge.tool == .select || bridge.tool == .draw)
+        .overlay {
+            if bridge.tool == .blur || bridge.tool == .eraseText {
+                MarkupBrushOverlayView(document: document, tool: bridge.tool)
+                    .id(bridge.tool)
+            }
+        }
+    }
+}
+
+/// Wraps PaperKit because its macOS canvas is only available as an AppKit view controller.
+private struct PaperMarkupCanvasView: NSViewControllerRepresentable {
+    let image: NSImage?
     let document: MarkupDocument
     let bridge: MarkupEditorBridge
 
@@ -19,14 +38,14 @@ struct MarkupCanvasView: NSViewControllerRepresentable {
         let controller = MarkupContentViewController(bridge: bridge)
         bridge.markupController.delegate = context.coordinator
         context.coordinator.document = document
-        controller.update(image: image, pixelatedImage: pixelatedImage, document: document)
+        controller.update(image: image, document: document)
         return controller
     }
 
     func updateNSViewController(_ controller: MarkupContentViewController, context: Context) {
         bridge.markupController.delegate = context.coordinator
         context.coordinator.document = document
-        controller.update(image: image, pixelatedImage: pixelatedImage, document: document)
+        controller.update(image: image, document: document)
     }
 
     static func dismantleNSViewController(
@@ -58,12 +77,11 @@ struct MarkupCanvasView: NSViewControllerRepresentable {
     }
 }
 
-/// Hosts the PaperKit canvas with the screenshot as its content and the blur overlay on top.
+/// Hosts the screenshot inside PaperKit, whose canvas requires an AppKit view controller.
 final class MarkupContentViewController: NSViewController {
     private let bridge: MarkupEditorBridge
     private let imageView = NSImageView()
     private let emptyContentView = NSView()
-    private var redactionOverlayView: RedactionOverlayHostingView?
     private weak var currentDocument: MarkupDocument?
     private var currentImageSize: CGSize?
     private var lastCenteredImageSize: CGSize?
@@ -95,9 +113,9 @@ final class MarkupContentViewController: NSViewController {
         centerContentIfNeeded()
     }
 
-    func update(image: NSImage?, pixelatedImage: NSImage?, document: MarkupDocument) {
+    func update(image: NSImage?, document: MarkupDocument) {
         installMarkupControllerIfNeeded()
-        updateRedactionOverlay(pixelatedImage: pixelatedImage, document: document)
+        if let image { document.imageEdits.setSourceIfNeeded(image) }
         currentDocument = document
         bridge.document = document
 
@@ -133,8 +151,6 @@ final class MarkupContentViewController: NSViewController {
 
     func detachMarkupController() {
         guard bridge.markupController.parent === self else { return }
-        redactionOverlayView?.removeFromSuperview()
-        redactionOverlayView = nil
         bridge.markupController.view.removeFromSuperview()
         bridge.markupController.removeFromParent()
         installed = false
@@ -154,29 +170,6 @@ final class MarkupContentViewController: NSViewController {
             markupView.topAnchor.constraint(equalTo: view.topAnchor),
             markupView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-    }
-
-    private func updateRedactionOverlay(pixelatedImage: NSImage?, document: MarkupDocument) {
-        let rootView = RedactionOverlayView(document: document, pixelatedImage: pixelatedImage)
-        if let redactionOverlayView {
-            redactionOverlayView.document = document
-            redactionOverlayView.rootView = rootView
-            return
-        }
-
-        let overlayView = RedactionOverlayHostingView(rootView: rootView)
-        overlayView.document = document
-        overlayView.translatesAutoresizingMaskIntoConstraints = false
-        overlayView.wantsLayer = true
-        overlayView.layer?.backgroundColor = NSColor.clear.cgColor
-        view.addSubview(overlayView)
-        NSLayoutConstraint.activate([
-            overlayView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            overlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            overlayView.topAnchor.constraint(equalTo: view.topAnchor),
-            overlayView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
-        redactionOverlayView = overlayView
     }
 
     private func configureImageViewAppearance() {
@@ -212,15 +205,5 @@ final class MarkupContentViewController: NSViewController {
         currentDocument?.contentVisibleFrame = visibleFrame
         lastCenteredImageSize = imageSize
         lastCenteredViewportSize = viewportSize
-    }
-}
-
-/// Lets clicks through to PaperKit unless Blur mode is on.
-final class RedactionOverlayHostingView: NSHostingView<RedactionOverlayView> {
-    weak var document: MarkupDocument?
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard document?.isRedactionMode == true else { return nil }
-        return super.hitTest(point)
     }
 }

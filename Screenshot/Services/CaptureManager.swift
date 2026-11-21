@@ -42,6 +42,7 @@ final class CaptureManager {
             let window = CaptureWindow(screen: screen)
             window.contentView = CaptureHostingView(rootView: CaptureView(
                 screenFrame: screen.frame,
+                screenVisibleFrame: screen.visibleFrame,
                 detector: detector,
                 selection: selection,
                 state: window.overlayState,
@@ -129,7 +130,6 @@ final class CaptureManager {
 
                 let state = editingWindow.overlayState
                 state.sourceImage = image
-                state.pixelatedImage = MarkupRenderer.shared.pixelatedImage(for: image)
                 state.markupDocument = MarkupDocument(imageSize: frame.size)
                 state.windowMask = windowMask
                 state.isEditing = true
@@ -153,12 +153,16 @@ final class CaptureManager {
             defer { captureTask = nil }
             do {
                 try await Task.sleep(for: .milliseconds(100))
-                let cgImage = try await ScreenCaptureService.captureRegion(rect)
+                let cgImage: CGImage
+                if let edited = snapshot.editedImage?.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                    cgImage = edited
+                } else {
+                    cgImage = try await ScreenCaptureService.captureRegion(rect)
+                }
                 try Task.checkCancellation()
                 let image = NSImage(cgImage: cgImage, size: rect.size)
                 let result = await MarkupRenderer.shared.renderedImage(
                     image: image,
-                    pixelatedImage: MarkupRenderer.shared.pixelatedImage(for: image),
                     snapshot: snapshot,
                     maskImage: windowMask.map { NSImage(cgImage: $0, size: rect.size) }
                 )

@@ -1,16 +1,18 @@
 import PaperKit
 import SwiftUI
 
-/// The markup tools: Select / Draw / Blur, pen, colour, shapes and text.
+/// The markup tools, including the text eraser, pen, colour, shapes and text.
 struct MarkupToolControls: View {
     @Bindable var bridge: MarkupEditorBridge
 
     var body: some View {
         HStack(spacing: 12) {
             toolPicker
+            if bridge.tool == .blur || bridge.tool == .eraseText, let session = bridge.document?.imageEdits {
+                MarkupBrushControls(session: session)
+            }
             penMenu
-            ColorPicker("Color", selection: $bridge.color, supportsOpacity: false)
-                .labelsHidden()
+            MarkupColorWell(color: $bridge.color)
                 .fixedSize()
                 .help("Color")
             shapesMenu
@@ -25,14 +27,15 @@ struct MarkupToolControls: View {
 
     private var toolPicker: some View {
         Picker("Markup Mode", selection: $bridge.tool) {
-            Label("Select", systemImage: "cursorarrow").tag(MarkupTool.select)
-            Label("Draw", systemImage: "pencil.tip").tag(MarkupTool.draw)
-            Label("Blur", systemImage: "checkerboard.rectangle").tag(MarkupTool.blur)
+            Label("Select", systemImage: MarkupTool.select.systemImage).tag(MarkupTool.select)
+            Label("Draw", systemImage: MarkupTool.draw.systemImage).tag(MarkupTool.draw)
+            Label("Mosaic", systemImage: MarkupTool.blur.systemImage).tag(MarkupTool.blur)
+            Label("Erase Text", systemImage: MarkupTool.eraseText.systemImage).tag(MarkupTool.eraseText)
         }
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
-        .help("Select, draw or blur")
+        .help("Select, draw, mosaic or erase text")
     }
 
     private var penMenu: some View {

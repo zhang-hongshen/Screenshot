@@ -7,7 +7,6 @@ final class CaptureState {
     var isEditing = false
     var windowMask: CGImage?
     var sourceImage: NSImage?
-    var pixelatedImage: NSImage?
     var markupDocument: MarkupDocument?
 }
 

@@ -4,21 +4,25 @@ import CoreGraphics
 enum MarkupEditorLayout {
     static let floatingToolbarHeight: CGFloat = 44
 
-    static func redactionOverlayFrame(for contentSize: CGSize) -> CGRect {
-        CGRect(origin: .zero, size: contentSize)
-    }
-
     static func captureEditorFrame(for canvasFrame: CGRect) -> CGRect {
         canvasFrame
     }
 
     static func captureToolbarCenter(
         for canvasFrame: CGRect,
-        toolbarHeight: CGFloat = floatingToolbarHeight
+        toolbarSize: CGSize,
+        availableFrame: CGRect
     ) -> CGPoint {
-        CGPoint(
-            x: canvasFrame.midX,
-            y: canvasFrame.minY - toolbarHeight / 2
+        let gap: CGFloat = 8
+        let halfWidth = toolbarSize.width / 2
+        let halfHeight = toolbarSize.height / 2
+        let above = canvasFrame.minY - gap - halfHeight
+        let below = canvasFrame.maxY + gap + halfHeight
+        let preferredY = above - halfHeight >= availableFrame.minY ? above : below
+
+        return CGPoint(
+            x: min(max(canvasFrame.midX, availableFrame.minX + halfWidth), availableFrame.maxX - halfWidth),
+            y: min(max(preferredY, availableFrame.minY + halfHeight), availableFrame.maxY - halfHeight)
         )
     }
 }

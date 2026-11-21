@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Copy, Save and Share, shared by the window toolbar and the capture overlay.
+/// Copy, Save and Share in the editor canvas context menu.
 struct MarkupExportControls: View {
     let copy: () -> Void
     let save: () -> Void
@@ -8,7 +8,6 @@ struct MarkupExportControls: View {
 
     var body: some View {
         Button("Copy", systemImage: "doc.on.doc", action: copy)
-            .keyboardShortcut("c", modifiers: .command)
             .help("Copy")
         Button("Save", systemImage: "square.and.arrow.down", action: save)
             .keyboardShortcut("s", modifiers: .command)

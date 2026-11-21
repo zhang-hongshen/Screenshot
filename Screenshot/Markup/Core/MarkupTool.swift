@@ -6,6 +6,16 @@ enum MarkupTool: Hashable {
     case select
     case draw
     case blur
+    case eraseText
+
+    var systemImage: String {
+        switch self {
+        case .select: "cursorarrow"
+        case .draw: "pencil.tip"
+        case .blur: "checkerboard.rectangle"
+        case .eraseText: "eraser.fill"
+        }
+    }
 }
 
 /// The pens offered in the toolbar.

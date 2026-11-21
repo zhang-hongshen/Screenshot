@@ -5,11 +5,13 @@ import ScreenCaptureKit
 /// The full-screen overlay on one display: window highlighting, region selection, and in-place markup.
 struct CaptureView: View {
     let screenFrame: CGRect
+    let screenVisibleFrame: CGRect
     let detector: WindowDetector
     let selection: RegionSelection
     let state: CaptureState
     let isScrollingCapture: Bool
 
+    @State private var toolbarSize = CGSize(width: 0, height: MarkupEditorLayout.floatingToolbarHeight)
     @State private var windowMask: CGImage?
     @State private var markupBridge = MarkupEditorBridge()
 
@@ -30,11 +32,15 @@ struct CaptureView: View {
                 editingContent()
             }
         }
+        .background {
+            MarkupPointer(
+                tool: state.isEditing ? markupBridge.tool : nil,
+                diameter: state.markupDocument?.imageEdits.brushDiameter ?? MarkupBrushSize.medium.diameter
+            )
+        }
         .ignoresSafeArea()
         .coordinateSpace(name: "captureOverlay")
-        .onKeyPress(keys: [.delete, .deleteForward]) { _ in
-            state.markupDocument?.handleDeleteKey() == true ? .handled : .ignored
-        }
+        .onDisappear { state.markupDocument?.imageEdits.cancel() }
     }
 
     private func editingContent() -> some View {
@@ -66,40 +72,76 @@ struct CaptureView: View {
             if let document = state.markupDocument {
                 let canvasFrame = overlayRect(from: capturedFrame)
                 let editorFrame = MarkupEditorLayout.captureEditorFrame(for: canvasFrame)
-                let toolbarCenter = MarkupEditorLayout.captureToolbarCenter(for: canvasFrame)
+                let availableFrame = overlayRect(from: screenVisibleFrame).insetBy(dx: 8, dy: 8)
+                let toolbarWidth = toolbarSize.width > 0
+                    ? min(toolbarSize.width, availableFrame.width) : availableFrame.width
+                let toolbarCenter = MarkupEditorLayout.captureToolbarCenter(
+                    for: canvasFrame,
+                    toolbarSize: CGSize(width: toolbarWidth, height: toolbarSize.height),
+                    availableFrame: availableFrame
+                )
 
-                HStack(spacing: 10) {
-                    MarkupToolControls(bridge: markupBridge)
-                    Divider()
-                        .frame(height: 20)
-                    ExtractTextButton(image: state.sourceImage)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 10) {
+                        MarkupToolControls(bridge: markupBridge)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .glassEffect(.regular, in: .capsule)
+                        HStack(spacing: 8) {
+                            MarkupHistoryControls(bridge: markupBridge, document: document)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .glassEffect(.regular, in: .capsule)
+                        HStack(spacing: 10) {
+                            ExtractTextButton(image: document.imageEdits.currentImage ?? state.sourceImage)
+                                .disabled(document.imageEdits.hasPendingChanges)
+                            Button("Copy", systemImage: "doc.on.doc") {
+                                export(.copy, document: document)
+                            }
+                            .keyboardShortcut("c", modifiers: .command)
+                            .disabled(document.imageEdits.hasPendingChanges)
+                            .help("Copy")
+                            Button("Done", systemImage: "checkmark") {
+                                export(.finish, document: document)
+                            }
+                            .buttonStyle(.glassProminent)
+                            .help("Copy and close")
+                            .disabled(document.imageEdits.hasPendingChanges)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .glassEffect(.regular, in: .capsule)
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .menuStyle(.button)
+                    .controlSize(.large)
+                    .fixedSize()
+                    .onGeometryChange(for: CGSize.self) { geometry in
+                        geometry.size
+                    } action: { size in
+                        toolbarSize = size
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .frame(width: toolbarWidth, height: toolbarSize.height)
+                .position(toolbarCenter)
+                .zIndex(1)
+
+                MarkupCanvasView(
+                    image: state.sourceImage,
+                    document: document,
+                    bridge: markupBridge
+                )
+                .contextMenu {
                     MarkupExportControls(
                         copy: { export(.copy, document: document) },
                         save: { export(.save, document: document) },
                         share: { export(.share, document: document) }
                     )
-                    Button("Done", systemImage: "checkmark") {
-                        export(.finish, document: document)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .help("Copy and close")
+                    .disabled(document.imageEdits.hasPendingChanges)
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .menuStyle(.button)
-                .controlSize(.large)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .glassEffect(.regular, in: .capsule)
-                .fixedSize()
-                .position(toolbarCenter)
-
-                MarkupCanvasView(
-                    image: state.sourceImage,
-                    pixelatedImage: state.pixelatedImage,
-                    document: document,
-                    bridge: markupBridge
-                )
                 .frame(width: editorFrame.width, height: editorFrame.height)
                 .mask {
                     if let mask = state.windowMask {

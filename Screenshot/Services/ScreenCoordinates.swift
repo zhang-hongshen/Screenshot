@@ -2,6 +2,24 @@ import AppKit
 
 /// Converts between AppKit (bottom-left origin), ScreenCaptureKit (top-left origin) and overlay coordinates.
 enum ScreenCoordinates {
+    nonisolated static func imageRect(fromVision rect: CGRect, imageSize: CGSize) -> CGRect {
+        CGRect(
+            x: rect.minX * imageSize.width,
+            y: (1 - rect.maxY) * imageSize.height,
+            width: rect.width * imageSize.width,
+            height: rect.height * imageSize.height
+        )
+    }
+
+    nonisolated static func drawingPath(fromImage path: CGPath, imageHeight: CGFloat) -> CGPath {
+        var transform = CGAffineTransform(translationX: 0, y: imageHeight).scaledBy(x: 1, y: -1)
+        return path.copy(using: &transform) ?? path
+    }
+
+    nonisolated static func drawingRect(fromImage rect: CGRect, imageHeight: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: imageHeight - rect.maxY, width: rect.width, height: rect.height)
+    }
+
     static func appKitRect(fromScreenCapture rect: CGRect) -> CGRect {
         guard let screen = screenContainingMost(screenCaptureRect: rect),
               let displayBounds = displayBounds(for: screen) else { return rect }
